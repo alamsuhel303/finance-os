@@ -1,0 +1,208 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'Edit' if investment else 'Add' }} Investment</h1>
+    <p class="page-subtitle" id="formSubtitle">Track holdings and monthly contributions</p>
+  </div>
+  <a href="{{ url_for('investments.index', edit=1) }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card form-card-wide">
+  <form method="post" novalidate id="investmentForm">
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label" for="name">Name</label>
+        <input type="text" class="form-control" id="name" name="name"
+               value="{{ form_data.get('name', '') }}"
+               placeholder="e.g. EPF — Self" required maxlength="150">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="asset_type">Type</label>
+        <select class="form-select" id="asset_type" name="asset_type" required>
+          {% for t in asset_types %}
+            <option value="{{ t }}" {% if form_data.get('asset_type') == t %}selected{% endif %}>
+              {{ asset_labels.get(t, t) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="invested_amount">Invested ({{ currency }})</label>
+        <div class="input-prefix input-prefix-lg">
+          <span>{{ currency_symbol }}</span>
+          <input type="text" inputmode="decimal" class="form-control amount-input" id="invested_amount" name="invested_amount"
+                 value="{{ form_data.get('invested_amount', '') }}" placeholder="0"
+                 data-amount-words="investedAmountWords" autocomplete="off">
+        </div>
+        <div class="form-text amount-words" id="investedAmountWords"></div>
+        <div class="form-text type-hint" data-for="epf">Your EPF balance / contribution so far</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="current_value">Current Value ({{ currency }})</label>
+        <div class="input-prefix input-prefix-lg">
+          <span>{{ currency_symbol }}</span>
+          <input type="text" inputmode="decimal" class="form-control amount-input" id="current_value" name="current_value"
+                 value="{{ form_data.get('current_value', '') }}" placeholder="0"
+                 data-amount-words="currentValueWords" autocomplete="off">
+        </div>
+        <div class="form-text amount-words" id="currentValueWords"></div>
+        <div class="form-text type-hint" data-for="epf">Usually same as invested for EPF</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="monthly_sip">Monthly amount ({{ currency }})</label>
+        <div class="input-prefix input-prefix-lg">
+          <span>{{ currency_symbol }}</span>
+          <input type="text" inputmode="decimal" class="form-control amount-input" id="monthly_sip" name="monthly_sip"
+                 value="{{ form_data.get('monthly_sip', '') }}" placeholder="0"
+                 data-amount-words="monthlySipWords" autocomplete="off">
+        </div>
+        <div class="form-text amount-words" id="monthlySipWords"></div>
+        <div class="form-text type-hint" data-for="epf">Employee contribution each month</div>
+        <div class="form-text type-hint" data-for="mutual_fund,sip">SIP installment — leave 0 if none</div>
+        <div class="form-text type-hint" data-for="nps,fd,stock,rsu,gold,other">Optional recurring amount</div>
+      </div>
+
+      {# —— Mutual fund NAV (MF / SIP only) —— #}
+      <div class="col-12 form-section" data-show="mutual_fund,sip">
+        <div class="section-divider">
+          <h2 class="section-title mb-1">Mutual fund NAV</h2>
+          <p class="form-text mb-0">
+            Link an AMFI scheme code + units so <strong>Refresh values</strong> can set current value = units × latest NAV.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-6 form-section" data-show="mutual_fund,sip">
+        <label class="form-label" for="scheme_search">Search fund</label>
+        <input type="text" class="form-control" id="scheme_search" placeholder="e.g. Parag Parikh Flexi Cap Direct"
+               autocomplete="off">
+        <div id="schemeSearchResults" class="scheme-search-results" hidden></div>
+      </div>
+      <div class="col-md-3 form-section" data-show="mutual_fund,sip">
+        <label class="form-label" for="scheme_code">Scheme code</label>
+        <input type="text" class="form-control" id="scheme_code" name="scheme_code" inputmode="numeric"
+               value="{{ form_data.get('scheme_code', '') }}" placeholder="122639" maxlength="20">
+      </div>
+      <div class="col-md-3 form-section" data-show="mutual_fund,sip">
+        <label class="form-label" for="units">Units</label>
+        <input type="text" inputmode="decimal" class="form-control" id="units" name="units"
+               value="{{ form_data.get('units', '') }}" placeholder="0" autocomplete="off">
+        {% if investment and investment.last_nav %}
+          <div class="form-text">
+            Last NAV {{ '%.4f'|format(investment.last_nav|float) }}
+            {% if investment.last_nav_date %} · {{ investment.last_nav_date.strftime('%d %b %Y') }}{% endif %}
+          </div>
+        {% endif %}
+      </div>
+      {# —— Monthly auto-post —— #}
+      <div class="col-12 form-section" data-show="mutual_fund,sip,epf,nps,fd,gold,other">
+        <div class="section-divider">
+          <h2 class="section-title mb-1">Monthly auto-post</h2>
+          <p class="form-text mb-0 type-hint" data-for="epf">
+            Salary deduction — no bank debit. Set day + amount, then use <strong>Post this month</strong>.
+          </p>
+          <p class="form-text mb-0 type-hint" data-for="mutual_fund,sip">
+            Debits your source account when you click <strong>Post this month</strong>.
+          </p>
+          <p class="form-text mb-0 type-hint" data-for="nps,fd,gold,other">
+            Optional schedule for <strong>Post this month</strong>.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4 form-section" data-show="mutual_fund,sip,epf,nps,fd,gold,other">
+        <label class="form-label" for="sip_day">
+          <span class="type-hint" data-for="epf">Credit day</span>
+          <span class="type-hint" data-for="mutual_fund,sip,nps,fd,gold,other">Debit day</span>
+        </label>
+        <select class="form-select" id="sip_day" name="sip_day">
+          <option value="">—</option>
+          {% for d in sip_days %}
+            <option value="{{ d }}" {% if form_data.get('sip_day')|string == d|string %}selected{% endif %}>
+              {{ d }}{{ 'st' if d == 1 else 'nd' if d == 2 else 'rd' if d == 3 else 'th' }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 form-section" data-show="mutual_fund,sip,nps,fd,gold,other">
+        <label class="form-label" for="source_account_id">Source account</label>
+        <select class="form-select" id="source_account_id" name="source_account_id">
+          <option value="">— Select —</option>
+          {% for a in accounts %}
+            {% if a.name != 'Salary deduction (non-cash)' %}
+            <option value="{{ a.id }}" {% if form_data.get('source_account_id')|string == a.id|string %}selected{% endif %}>
+              {{ a.name }}
+            </option>
+            {% endif %}
+          {% endfor %}
+        </select>
+        <div class="form-text">Cash account to debit when posting</div>
+      </div>
+      <div class="col-md-4 d-flex align-items-end form-section" data-show="mutual_fund,sip,epf,nps,fd,gold,other">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="sip_active" name="sip_active" value="1"
+                 {% if form_data.get('sip_active', '1') in ['1', 'true', 'on'] %}checked{% endif %}>
+          <label class="form-check-label" for="sip_active">Active (uncheck to pause)</label>
+        </div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="owner">Owner</label>
+        <select class="form-select" id="owner" name="owner">
+          {% for o in owners %}
+            <option value="{{ o }}" {% if form_data.get('owner', 'joint') == o %}selected{% endif %}>{{ o | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="goal_id">Purpose / Goal</label>
+        <select class="form-select" id="goal_id" name="goal_id">
+          <option value="">None (untagged)</option>
+          {% for g in goals %}
+            <option value="{{ g.id }}" {% if form_data.get('goal_id')|string == g.id|string %}selected{% endif %}>
+              {{ g.name }} · {{ g.goal_type | replace('_', ' ') }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Pick Emergency Fund to count this holding toward emergency cover (no cash move).</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="start_date">Start Date</label>
+        <input type="date" class="form-control" id="start_date" name="start_date"
+               value="{{ form_data.get('start_date', '') }}">
+      </div>
+
+      <div class="col-12">
+        <label class="form-label" for="notes">Notes</label>
+        <textarea class="form-control" id="notes" name="notes" rows="2">{{ form_data.get('notes', '') }}</textarea>
+      </div>
+
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
+                 {% if form_data.get('is_active', '1') in ['1', 'true', 'on'] %}checked{% endif %}>
+          <label class="form-check-label" for="is_active">Active</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+      <button type="submit" class="btn btn-accent">
+        <i class="bi bi-check-lg me-1"></i> Save
+      </button>
+      <a href="{{ url_for('investments.index', edit=1) }}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.SCHEME_SEARCH_URL = {{ url_for('investments.search_schemes') | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/amount-words.js') }}?v=3"></script>
+<script src="{{ url_for('static', filename='js/investment-form.js') }}?v=2"></script>
+{% endblock %}

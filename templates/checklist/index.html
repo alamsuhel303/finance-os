@@ -1,0 +1,116 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Month checklist</h1>
+    <p class="page-subtitle">
+      {{ month_label }} · {{ done_count }}/{{ step_total }} done
+      {% if ready_count %} · <strong>{{ ready_count }} ready</strong>{% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Dashboard
+  </a>
+</div>
+
+<nav class="checklist-flow glass-card mb-4" aria-label="Month ritual order">
+  <ol class="checklist-flow-list">
+    {% for step in steps %}
+      <li class="checklist-flow-item status-{{ step.status }}">
+        <span class="checklist-flow-n">{{ step.n }}</span>
+        <span class="checklist-flow-label">{{ step.title }}</span>
+        {% if not loop.last %}
+          <span class="checklist-flow-arrow" aria-hidden="true">→</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+  <p class="page-subtitle mb-0 mt-2">
+    Order: income → Fund Joint → SIPs → EPF → snapshot. EPF is separate (salary deduction, not a bank SIP).
+  </p>
+</nav>
+
+<div class="row g-3 mb-4">
+  {% for step in steps %}
+    <div class="col-12">
+      <div class="glass-card checklist-step status-{{ step.status }}">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+          <div class="flex-grow-1">
+            <h2 class="section-title mb-1">
+              {% if step.status == 'done' %}
+                <i class="bi bi-check-circle-fill me-1" style="color: var(--success, #34d399)"></i>
+              {% elif step.status == 'ready' %}
+                <i class="bi bi-exclamation-circle-fill me-1" style="color: var(--warning, #fbbf24)"></i>
+              {% elif step.status == 'setup' %}
+                <i class="bi bi-gear me-1"></i>
+              {% else %}
+                <i class="bi bi-dash-circle me-1"></i>
+              {% endif %}
+              <span class="checklist-step-n">{{ step.n }}.</span> {{ step.title }}
+            </h2>
+            <p class="stat-meta mb-1">{{ step.blurb }}</p>
+            <p class="page-subtitle mb-0">{{ step.detail }}</p>
+            <div class="stat-meta mt-1">
+              {% if step.status == 'done' %}Done
+              {% elif step.status == 'ready' %}Ready to post
+              {% elif step.status == 'setup' %}Needs setup
+              {% else %}Optional / idle
+              {% endif %}
+            </div>
+          </div>
+          <div class="d-flex flex-column align-items-end gap-2">
+            {% if step.amount %}
+              <div class="checklist-amount {% if step.status == 'done' %}is-done{% elif step.status == 'ready' %}is-ready{% endif %}">
+                <div class="stat-label">{% if step.status == 'done' %}Posted{% elif step.status == 'ready' %}Ready{% else %}Amount{% endif %}</div>
+                <div class="stat-value">{{ currency }}{{ step.amount }}</div>
+              </div>
+            {% endif %}
+            <div class="d-flex gap-2 flex-wrap justify-content-end">
+              {% for action in step.actions %}
+                {% if action.method == 'POST' %}
+                  <form method="post" action="{{ url_for(action.url) }}">
+                    <button type="submit" class="btn {% if step.status == 'ready' %}btn-accent{% else %}btn-ghost{% endif %}">
+                      {{ action.label }}
+                    </button>
+                  </form>
+                {% else %}
+                  <a href="{{ url_for(action.url) }}" class="btn btn-ghost">{{ action.label }}</a>
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+{% if reminders %}
+  <div class="glass-card">
+    <h2 class="section-title">Other reminders</h2>
+    <p class="page-subtitle mb-3">Backup, insurance, and anything else due</p>
+    {% for rem in reminders %}
+      {% if rem.key not in ['income_post', 'income_setup', 'joint_fund', 'sip_post', 'epf_post', 'nw_snapshot'] %}
+        <div class="account-row">
+          <div>
+            <div class="account-name">{{ rem.title }}</div>
+            <div class="account-type">{{ rem.detail }}</div>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            {% for action in rem.actions %}
+              {% if action.method == 'POST' %}
+                <form method="post" action="{{ url_for(action.url) }}">
+                  <button type="submit" class="btn btn-ghost btn-sm">{{ action.label }}</button>
+                </form>
+              {% else %}
+                <a href="{{ url_for(action.url) }}" class="btn btn-ghost btn-sm">{{ action.label }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

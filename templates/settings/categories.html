@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Categories</h1>
+    <p class="page-subtitle">Labels for transactions, budgets, and Excel import dropdowns</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('settings.index') }}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left me-1"></i> Settings
+    </a>
+    <a href="{{ url_for('settings.category_create') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Category
+    </a>
+  </div>
+</div>
+
+<div class="glass-card">
+  {% if categories %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Envelope</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cat in categories %}
+            <tr {% if not cat.is_active %}style="opacity:0.5"{% endif %}>
+              <td class="desc-cell">
+                <span class="category-pill">
+                  <span class="category-dot" style="background: {{ cat.color }}"></span>
+                  <i class="bi {{ cat.icon or 'bi-tag' }} me-1"></i>
+                  {{ cat.name }}
+                </span>
+              </td>
+              <td>{{ category_type_labels.get(cat.category_type, cat.category_type) }}</td>
+              <td>{{ cat.envelope.name if cat.envelope else '—' }}</td>
+              <td>
+                {% if cat.is_active %}
+                  <span class="badge-type badge-income">Active</span>
+                {% else %}
+                  <span class="badge-type">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('settings.category_edit', category_id=cat.id) }}" class="btn-icon">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <form method="post" action="{{ url_for('settings.category_delete', category_id=cat.id) }}"
+                      class="d-inline" onsubmit="return confirm('Delete {{ cat.name }}? Used categories should be deactivated instead.')">
+                  <button type="submit" class="btn-icon"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-tags"></i>
+      <div>No categories yet — add your first one.</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,185 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Transactions</h1>
+    <p class="page-subtitle">
+      {% if filter_account %}
+        Showing ledger for <strong>{{ filter_account.name }}</strong>
+        · Balance {{ filter_account.current_balance | inr }}
+        · <a href="{{ url_for('transactions.list_transactions') }}">Clear filter</a>
+      {% else %}
+        Your complete money ledger
+      {% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('transactions.import_page') }}" class="btn btn-ghost">
+      <i class="bi bi-upload me-1"></i> Import Excel
+    </a>
+    <a href="{{ url_for('transactions.create', **request.args) }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Transaction
+    </a>
+  </div>
+</div>
+
+<div class="glass-card mb-3">
+  <form method="get" class="filter-bar">
+    <div class="search-input">
+      <label class="form-label">Search</label>
+      <input type="search" name="q" value="{{ filters.q }}" class="form-control" placeholder="Description or notes…">
+    </div>
+    <div>
+      <label class="form-label">Type</label>
+      <select name="type" class="form-select">
+        <option value="">All</option>
+        {% for t in transaction_types %}
+          <option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Category</label>
+      <select name="category" class="form-select">
+        <option value="">All</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if filters.category == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Account</label>
+      <select name="account" class="form-select">
+        <option value="">All</option>
+        {% for acc in accounts %}
+          <option value="{{ acc.id }}" {% if filters.account == acc.id %}selected{% endif %}>{{ acc.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Paid By</label>
+      <select name="paid_by" class="form-select">
+        <option value="">All</option>
+        {% for p in paid_by_choices %}
+          <option value="{{ p }}" {% if filters.paid_by == p %}selected{% endif %}>{{ p | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">From</label>
+      <input type="date" name="from" value="{{ filters.from }}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">To</label>
+      <input type="date" name="to" value="{{ filters.to }}" class="form-control">
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-accent">Filter</button>
+      <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-ghost">Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="glass-card">
+  {% if transactions %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Category</th>
+            <th>Account</th>
+            <th>Paid By</th>
+            <th>Mode</th>
+            <th class="text-end">Amount</th>
+            {% if running_balances is not none %}
+              <th class="text-end">Balance after</th>
+            {% endif %}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for txn in transactions %}
+          <tr>
+            <td>{{ txn.date.strftime('%d %b %Y') }}</td>
+            <td>
+              <div class="desc-cell">{{ txn.description }}</div>
+              {% if txn.need_want != 'n/a' %}
+                <span class="badge-need">{{ txn.need_want }}</span>
+              {% endif %}
+            </td>
+            <td><span class="badge-type badge-{{ txn.transaction_type }}">{{ txn.transaction_type }}</span></td>
+            <td>
+              {% if txn.category %}
+                <span class="category-pill">
+                  <span class="category-dot" style="background: {{ txn.category.color }}"></span>
+                  {{ txn.category.name }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if txn.transaction_type == 'transfer' and txn.to_account %}
+                {{ txn.account.name if txn.account else '—' }}
+                <span class="account-type">→ {{ txn.to_account.name }}</span>
+              {% else %}
+                {{ txn.account.name if txn.account else '—' }}
+              {% endif %}
+            </td>
+            <td class="text-capitalize">{{ txn.paid_by }}</td>
+            <td class="text-capitalize">{{ txn.payment_mode | replace('_', ' ') }}</td>
+            <td class="text-end amount-cell {% if txn.transaction_type in ['income', 'refund'] %}stat-positive{% elif txn.transaction_type in ['expense', 'investment'] %}stat-negative{% elif txn.transaction_type == 'transfer' and filter_account and txn.to_account_id == filter_account.id %}stat-positive{% elif txn.transaction_type == 'transfer' %}stat-negative{% endif %}">
+              {% if filter_account and txn.transaction_type == 'transfer' %}
+                {% if txn.to_account_id == filter_account.id %}+{% else %}−{% endif %}{{ txn.amount | inr }}
+              {% else %}
+                {% if txn.transaction_type in ['income', 'refund'] %}+{% elif txn.transaction_type in ['expense', 'investment'] %}−{% endif %}{{ txn.amount | inr }}
+              {% endif %}
+            </td>
+            {% if running_balances is not none %}
+              <td class="text-end amount-cell running-balance">
+                {{ running_balances.get(txn.id, 0) | inr }}
+              </td>
+            {% endif %}
+            <td class="text-nowrap">
+              <a href="{{ url_for('transactions.edit', txn_id=txn.id, **request.args) }}" class="btn-icon" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="post" action="{{ url_for('transactions.delete', txn_id=txn.id, **request.args) }}" class="d-inline"
+                    onsubmit="return confirm('Delete this transaction?');">
+                <button type="submit" class="btn-icon" title="Delete" style="color: var(--danger)">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pagination.pages > 1 %}
+      <nav class="mt-3 d-flex justify-content-between align-items-center">
+        <span class="stat-meta mb-0">
+          Page {{ pagination.page }} of {{ pagination.pages }} · {{ pagination.total }} total
+        </span>
+        <ul class="pagination mb-0">
+          <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('transactions.list_transactions', page=pagination.prev_num, **request.args) if pagination.has_prev else '#' }}">Prev</a>
+          </li>
+          <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link" href="{{ url_for('transactions.list_transactions', page=pagination.next_num, **request.args) if pagination.has_next else '#' }}">Next</a>
+          </li>
+        </ul>
+      </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-inbox d-block"></i>
+      <p class="mb-2">No transactions match your filters.</p>
+      <a href="{{ url_for('transactions.create', **request.args) }}" class="btn btn-accent btn-sm">Add Transaction</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

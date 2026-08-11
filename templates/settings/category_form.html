@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'Edit' if category else 'Add' }} Category</h1>
+    <p class="page-subtitle">
+      {% if category %}
+        Used on transactions, budgets, and import dropdowns
+      {% else %}
+        New labels show up in transaction forms and Excel import after you save
+      {% endif %}
+    </p>
+  </div>
+  <a href="{{ url_for('settings.categories_index') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card">
+  <form method="post" novalidate>
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label" for="name">Name</label>
+        <input type="text" class="form-control" id="name" name="name"
+               value="{{ form_data.get('name', '') }}"
+               placeholder="e.g. Streaming, Pet Care" required maxlength="100">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="category_type">Type</label>
+        <select class="form-select" id="category_type" name="category_type" required>
+          {% for t in category_types %}
+            <option value="{{ t }}" {% if form_data.get('category_type') == t %}selected{% endif %}>
+              {{ category_type_labels.get(t, t) }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="color">Color</label>
+        <div class="d-flex gap-2 align-items-center">
+          <input type="color" class="form-control form-control-color" id="color" name="color"
+                 value="{{ form_data.get('color', '#34d399') }}" title="Pick color">
+          <div class="d-flex gap-1 flex-wrap">
+            {% for c in default_colors %}
+              <button type="button" class="btn-icon color-swatch" data-color="{{ c }}"
+                      style="width:1.25rem;height:1.25rem;border-radius:50%;background:{{ c }};border:1px solid rgba(255,255,255,.2)"
+                      aria-label="Use {{ c }}"></button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="icon">Icon</label>
+        <select class="form-select" id="icon" name="icon">
+          {% for ic in icon_choices %}
+            <option value="{{ ic }}" {% if form_data.get('icon', 'bi-tag') == ic %}selected{% endif %}>
+              {{ ic.replace('bi-', '') }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="sort_order">Sort Order</label>
+        <input type="number" class="form-control" id="sort_order" name="sort_order"
+               value="{{ form_data.get('sort_order', '10') }}">
+      </div>
+
+      <div class="col-md-8">
+        <label class="form-label" for="envelope_id">Default envelope (optional)</label>
+        <select class="form-select" id="envelope_id" name="envelope_id">
+          <option value="">— None —</option>
+          {% for env in envelopes %}
+            <option value="{{ env.id }}"
+              {% if form_data.get('envelope_id')|string == env.id|string %}selected{% endif %}>
+              {{ env.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Used when auto-mapping spend to a virtual envelope.</div>
+      </div>
+
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
+                 {% if form_data.get('is_active', '1') in ['1', 'true', 'on'] %}checked{% endif %}>
+          <label class="form-check-label" for="is_active">Active</label>
+        </div>
+        <div class="form-text">Inactive categories stay on old transactions but hide from new forms.</div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+      <button type="submit" class="btn btn-accent">
+        <i class="bi bi-check-lg me-1"></i> Save
+      </button>
+      <a href="{{ url_for('settings.categories_index') }}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.color-swatch').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var input = document.getElementById('color');
+      if (input) input.value = btn.getAttribute('data-color');
+    });
+  });
+</script>
+{% endblock %}

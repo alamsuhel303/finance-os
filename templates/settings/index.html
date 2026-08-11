@@ -1,0 +1,304 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Backup, restore, and data exports</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Transactions</div>
+      <div class="stat-value">{{ stats.transactions or 0 }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Accounts</div>
+      <div class="stat-value">{{ stats.accounts or 0 }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Budgets</div>
+      <div class="stat-value">{{ stats.budgets or 0 }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Database</div>
+      <div class="stat-value" style="font-size:1.25rem">{{ stats.size_kb or 0 }} KB</div>
+      <div class="stat-meta text-truncate" title="{{ stats.path }}">SQLite</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Backup Database</h2>
+      <p class="page-subtitle mb-3">
+        Snapshot into local <code>backups/</code>. Dashboard reminds you every
+        {{ config_backup_days if config_backup_days is defined else 7 }} days if stale —
+        also copy that folder (or <code>database/finance.db</code>) off this Mac.
+      </p>
+      <form method="post" action="{{ url_for('settings.backup') }}" class="d-flex gap-2 flex-wrap">
+        <input type="text" name="label" class="form-control" placeholder="Optional label (e.g. before-sprint3)" style="max-width:260px">
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-cloud-arrow-down me-1"></i> Create Backup
+        </button>
+      </form>
+      <form method="post" action="{{ url_for('settings.rebuild_balances') }}" class="mt-3"
+            onsubmit="return confirm('Recalculate all account balances from opening + transactions?')">
+        <button type="submit" class="btn btn-ghost">
+          <i class="bi bi-arrow-repeat me-1"></i> Recalculate balances
+        </button>
+        <div class="form-text mt-1">Fixes current balance if it drifted from the ledger.</div>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Categories</h2>
+      <p class="page-subtitle mb-3">
+        Add or rename spending/income labels used on transactions, budgets, and Excel import.
+      </p>
+      <a href="{{ url_for('settings.categories_index') }}" class="btn btn-accent">
+        <i class="bi bi-tags me-1"></i> Manage Categories
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="glass-card">
+      <h2 class="section-title">Export CSV</h2>
+      <p class="page-subtitle mb-3">Download ledger data for spreadsheets or archival.</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="{{ url_for('settings.export_transactions') }}" class="btn btn-ghost">
+          <i class="bi bi-filetype-csv me-1"></i> Transactions
+        </a>
+        <a href="{{ url_for('settings.export_accounts') }}" class="btn btn-ghost">
+          <i class="bi bi-filetype-csv me-1"></i> Accounts
+        </a>
+        <a href="{{ url_for('settings.export_networth') }}" class="btn btn-ghost">
+          <i class="bi bi-filetype-csv me-1"></i> Net Worth
+        </a>
+        <a href="{{ url_for('settings.export_investments') }}" class="btn btn-ghost">
+          <i class="bi bi-filetype-csv me-1"></i> Investments
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="section-title mb-0">Joint Funding</h2>
+      <p class="page-subtitle mb-0 mt-1">
+        Who pays into Joint · one shared envelope plan (leftover → Unallocated)
+        {% if joint_status.ready_count %}
+          · <strong>{{ joint_status.ready_count }} ready for {{ joint_status.label }}</strong>
+        {% elif joint_plan and joint_plan.is_active %}
+          · Plan active
+        {% elif joint_plan %}
+          · Plan inactive
+        {% else %}
+          · Not set up yet
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if joint_status.ready_count %}
+        <form method="post" action="{{ url_for('settings.post_joint_funding') }}">
+          <button type="submit" class="btn btn-accent">Post this month</button>
+        </form>
+      {% endif %}
+      <a href="{{ url_for('settings.joint_funding_edit') }}" class="btn btn-ghost">
+        <i class="bi bi-pencil me-1"></i> {{ 'Edit plan' if joint_plan else 'Set up plan' }}
+      </a>
+    </div>
+  </div>
+  {% if joint_plan and joint_plan.is_active %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>Amount</th>
+            <th>This month</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in joint_status.rows %}
+            <tr>
+              <td class="desc-cell">{{ row.label }}{% if row.account_id %} · account set{% endif %}</td>
+              <td class="amount-cell">{{ row.amount | inr }}</td>
+              <td>
+                {% if row.status == 'posted' %}
+                  <span class="badge-type badge-income">Posted</span>
+                {% elif row.status == 'ready' %}
+                  <span class="badge-type badge-transfer">Ready</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if joint_plan.splits %}
+      <div class="stat-meta mt-3 mb-0">
+        Shared envelope plan:
+        {% for s in joint_plan.splits %}
+          {{ s.envelope.name if s.envelope else 'Envelope' }} {{ s.amount | inr }}{% if not loop.last %} · {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="stat-meta">
+      Set Suhel/Seema contributions and label the Joint pool (Essentials, Shopping…).
+      Leftover goes to Unallocated. Manual transfers with custom splits still work anytime.
+    </div>
+  {% endif %}
+</div>
+
+<div class="glass-card mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="section-title mb-0">Recurring Income</h2>
+      <p class="page-subtitle mb-0 mt-1">
+        Salary templates · Dashboard prompts you to post each month
+        {% if income_status.ready_count %}
+          · <strong>{{ income_status.ready_count }} ready for {{ income_status.label }}</strong>
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if income_status.ready_count %}
+        <form method="post" action="{{ url_for('settings.post_recurring_income') }}">
+          <button type="submit" class="btn btn-accent">Post this month</button>
+        </form>
+      {% endif %}
+      <a href="{{ url_for('settings.recurring_income_create') }}" class="btn btn-ghost">
+        <i class="bi bi-plus-lg me-1"></i> Add
+      </a>
+    </div>
+  </div>
+  {% if income_templates %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Amount</th>
+            <th>Account</th>
+            <th>Day</th>
+            <th>This month</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in income_templates %}
+            {% set row = income_status.rows | selectattr('template.id', 'equalto', t.id) | list %}
+            <tr {% if not t.is_active %}style="opacity:0.5"{% endif %}>
+              <td class="desc-cell">{{ t.name }}</td>
+              <td class="amount-cell">{{ t.amount | inr }}</td>
+              <td>{{ t.account.name if t.account else '—' }}</td>
+              <td>{{ t.day_of_month }}</td>
+              <td>
+                {% if row and row[0].status == 'posted' %}
+                  <span class="badge-type badge-income">Posted</span>
+                {% elif row and row[0].status == 'ready' %}
+                  <span class="badge-type badge-transfer">Ready</span>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('settings.recurring_income_edit', template_id=t.id) }}" class="btn-icon"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="{{ url_for('settings.recurring_income_delete', template_id=t.id) }}" class="d-inline"
+                      onsubmit="return confirm('Delete this template?')">
+                  <button type="submit" class="btn-icon"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="stat-meta">No templates yet — add Suhel / Seema salary so Monthly Income can be posted in one click.</div>
+  {% endif %}
+</div>
+
+<div class="glass-card">
+  <h2 class="section-title">Restore from Backup</h2>
+  <p class="page-subtitle mb-3">
+    Restoring overwrites the live database. A safety copy is saved first.
+    Type <strong>RESTORE</strong> to confirm.
+  </p>
+
+  {% if backups %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Size</th>
+            <th>Created (UTC)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in backups %}
+            <tr>
+              <td class="desc-cell"><code>{{ b.name }}</code></td>
+              <td>{{ b.size_kb }} KB</td>
+              <td>{{ b.modified.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>
+                <form method="post" action="{{ url_for('settings.restore') }}" class="d-flex gap-2 align-items-center justify-content-end">
+                  <input type="hidden" name="filename" value="{{ b.name }}">
+                  <input type="text" name="confirm" class="form-control" placeholder="RESTORE" style="max-width:120px" autocomplete="off">
+                  <button type="submit" class="btn btn-danger-ghost" onclick="return confirm('Overwrite the live database with this backup?')">
+                    Restore
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-archive"></i>
+      <div>No backups yet — create one above.</div>
+    </div>
+  {% endif %}
+</div>
+
+<div class="glass-card mt-3">
+  <h2 class="section-title">Preferences</h2>
+  <div class="account-row">
+    <div>
+      <div class="account-name">Currency</div>
+      <div class="account-type">Configured via CURRENCY_SYMBOL in .env</div>
+    </div>
+    <div class="amount-cell">{{ currency }}</div>
+  </div>
+  <div class="account-row">
+    <div>
+      <div class="account-name">Theme</div>
+      <div class="account-type">Dark premium (system default)</div>
+    </div>
+    <div class="badge-type badge-investment">Dark</div>
+  </div>
+</div>
+{% endblock %}

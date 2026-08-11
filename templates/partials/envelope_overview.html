@@ -1,0 +1,226 @@
+{# Shared Joint Envelopes UI — expects `envelopes` overview dict
+   summary_mode: "reconcile" (default, Envelopes page) | "monthly" (Budget page)
+#}
+{% set show_summary = show_summary if show_summary is defined else true %}
+{% set show_header = show_header if show_header is defined else true %}
+{% set summary_mode = summary_mode if summary_mode is defined else "reconcile" %}
+
+{% if show_header %}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+  <div>
+    <h2 class="section-title mb-1">
+      {% if summary_mode == "monthly" %}
+        Envelope activity
+      {% else %}
+        Joint Account Envelopes
+      {% endif %}
+      <span class="account-type fw-normal">· {{ envelopes.month_label }}</span>
+    </h2>
+    <p class="page-subtitle mb-0">
+      {% if summary_mode == "monthly" %}
+        How Joint purpose pots were used this month — allocated, spent, left.
+        This is not your Budget (Budget = category spend limits).
+        Leftovers carry into later months.
+      {% else %}
+        Purpose split of money sitting in
+        {% if envelopes.joint_account %}
+          <strong>{{ envelopes.joint_account.name }}</strong>
+        {% else %}
+          Joint
+        {% endif %}
+        — leftovers roll as carry forward.
+        Not the same as Budget category limits.
+      {% endif %}
+    </p>
+  </div>
+  {% if manage_href is defined and manage_href %}
+    <a href="{{ manage_href }}" class="btn btn-ghost btn-sm">{{ manage_label | default('Full page') }}</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if show_summary %}
+  {% if summary_mode == "monthly" %}
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Allocated this month</div>
+        <div class="stat-value">{{ envelopes.total_allocated | inr }}</div>
+        <div class="stat-meta">
+          {% if envelopes.total_carry_forward %}
+            + {{ envelopes.total_carry_forward | inr }} carry forward
+          {% else %}
+            From transfer splits
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Available</div>
+        <div class="stat-value">{{ envelopes.total_available | inr }}</div>
+        <div class="stat-meta">Carry forward + allocated</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Utilized</div>
+        <div class="stat-value {% if envelopes.month_util_pct >= 100 %}stat-negative{% else %}stat-warning{% endif %}">
+          {{ envelopes.total_spent | inr }}
+        </div>
+        <div class="stat-meta">{{ envelopes.month_util_pct }}% of available</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Left this month</div>
+        <div class="stat-value {% if envelopes.month_left >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+          {{ envelopes.month_left | inr }}
+        </div>
+        <div class="stat-meta">
+          {% set util_bar = envelopes.month_util_pct if envelopes.month_util_pct < 100 else 100 %}
+          <div class="progress mt-2">
+            <div class="progress-bar {% if envelopes.month_util_pct >= 100 %}progress-over{% elif envelopes.month_util_pct >= 75 %}progress-watch{% else %}progress-ok{% endif %}"
+                 style="width: {{ util_bar }}%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Joint Balance</div>
+        <div class="stat-value">{{ envelopes.joint_balance | inr }}</div>
+        <div class="stat-meta">Real cash in bank</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Allocated this month</div>
+        <div class="stat-value">{{ envelopes.total_allocated | inr }}</div>
+        <div class="stat-meta">
+          {% if envelopes.total_carry_forward %}
+            + {{ envelopes.total_carry_forward | inr }} carry forward
+          {% else %}
+            From transfer splits
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Spent this month</div>
+        <div class="stat-value stat-warning">{{ envelopes.total_spent | inr }}</div>
+        <div class="stat-meta">Drawn from envelopes</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Remaining</div>
+        <div class="stat-value {% if envelopes.is_balanced %}stat-accent{% endif %}">
+          {{ envelopes.total_remaining | inr }}
+        </div>
+        <div class="stat-meta">
+          {% if envelopes.is_balanced %}
+            Matches Joint
+          {% elif envelopes.difference > 0 %}
+            {{ envelopes.difference | inr }} unlabelled in Joint
+          {% else %}
+            {{ (-envelopes.difference) | inr }} over-allocated
+            <span class="d-block mt-1">
+              Envelope labels exceed Joint cash — usually a Joint spend without an
+              envelope tag, or cash left Joint. New Joint expenses default to Essentials.
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+{% endif %}
+
+<div class="row g-3">
+  {% for row in envelopes.rows %}
+    {% set e = row.envelope %}
+    <div class="col-md-6 col-xl-4">
+      <a href="{{ url_for('envelopes.detail', envelope_id=e.id, year=envelopes.year, month=envelopes.month) }}"
+         class="glass-card goal-card h-100 text-decoration-none d-block"
+         style="color: inherit">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <div class="goal-icon" style="background: {{ e.color }}22; color: {{ e.color }}">
+            <i class="bi {{ e.icon or 'bi-envelope' }}"></i>
+          </div>
+          <div class="flex-grow-1">
+            <div class="account-name">
+              {{ e.name }}
+              <i class="bi bi-chevron-right ms-1" style="opacity:.45;font-size:.85em"></i>
+            </div>
+            <div class="account-type">{{ envelopes.month_label }} · tap for transactions</div>
+          </div>
+        </div>
+
+        <div class="envelope-metrics">
+          <div class="envelope-metric">
+            <span class="envelope-metric-label">Allocated</span>
+            <span class="envelope-metric-value">{{ row.allocated | inr }}</span>
+          </div>
+          <div class="envelope-metric">
+            <span class="envelope-metric-label">Utilized</span>
+            <span class="envelope-metric-value text-danger-soft">{{ row.spent | inr }}</span>
+          </div>
+          <div class="envelope-metric">
+            <span class="envelope-metric-label">Left</span>
+            <span class="envelope-metric-value {% if row.remaining < 0 %}text-danger-soft{% else %}accent{% endif %}">
+              {{ row.remaining | inr }}
+            </span>
+          </div>
+        </div>
+
+        {% if row.remaining < 0 %}
+          <div class="carry-forward-badge warn mt-2">
+            Overspent {{ (-row.remaining) | inr }} — allocate more on next Joint transfer
+          </div>
+        {% elif row.carry_forward and row.carry_forward > 0 %}
+          <div class="carry-forward-badge mt-2">
+            Carry forward {{ row.carry_forward | inr }}
+            <span class="account-type">(left from earlier months)</span>
+          </div>
+        {% elif row.carry_forward and row.carry_forward < 0 %}
+          <div class="carry-forward-badge warn mt-2">
+            Prior overspend {{ (-row.carry_forward) | inr }}
+          </div>
+        {% endif %}
+
+        {% if row.available > 0 or row.spent > 0 %}
+          {% set bar_w = row.spend_pct if row.spend_pct < 100 else 100 %}
+          <div class="progress mt-3">
+            <div class="progress-bar {% if row.spend_pct >= 100 or row.remaining < 0 %}progress-over{% elif row.spend_pct >= 75 %}progress-watch{% else %}progress-ok{% endif %}"
+                 style="width: {{ bar_w }}%"></div>
+          </div>
+          <div class="stat-meta mt-1">
+            {% if row.remaining < 0 %}
+              Over envelope · utilized {{ row.spent | inr }} this month
+            {% else %}
+              {{ row.spend_pct }}% utilized of available
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if row.categories %}
+          <div class="stat-meta mt-2">Spend categories: {{ row.categories | join(', ') }}</div>
+        {% else %}
+          <div class="stat-meta mt-2">Catch-all / manual allocations</div>
+        {% endif %}
+      </a>
+    </div>
+  {% else %}
+    <div class="col-12">
+      <div class="glass-card empty-state">
+        <i class="bi bi-envelope"></i>
+        <div>No envelopes yet — transfer into Joint with a split to start</div>
+      </div>
+    </div>
+  {% endfor %}
+</div>

@@ -1,0 +1,324 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Investments</h1>
+    <p class="page-subtitle">Portfolio holdings · SIPs, funds, EPF, RSUs & more</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <form method="post" action="{{ url_for('investments.refresh_navs') }}" class="d-inline">
+      <button type="submit" class="btn btn-ghost"
+              title="Fetch latest market price and recalculate current value (units × NAV). Units grow when you Post this month.">
+        <i class="bi bi-arrow-repeat me-1"></i> Refresh values
+        {% if summary.nav_eligible_count %}
+          <span class="stat-meta">({{ summary.nav_eligible_count }})</span>
+        {% endif %}
+      </button>
+    </form>
+    {% if summary.sip_status.ready_count %}
+      <form method="post" action="{{ url_for('investments.post_sips') }}"
+            onsubmit="return confirm('Post {{ summary.sip_status.ready_count }} SIP{{ 's' if summary.sip_status.ready_count != 1 else '' }} for {{ summary.sip_status.label }} ({{ summary.sip_status.ready_total | inr }})?')">
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-lightning-charge me-1"></i> Post SIPs
+        </button>
+      </form>
+    {% endif %}
+    {% if summary.epf_status.ready_count %}
+      <form method="post" action="{{ url_for('investments.post_epf') }}"
+            onsubmit="return confirm('Post {{ summary.epf_status.ready_count }} EPF for {{ summary.epf_status.label }} ({{ summary.epf_status.ready_total | inr }})? No bank debit.')">
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-building me-1"></i> Post EPF
+        </button>
+      </form>
+    {% endif %}
+    <a href="{{ url_for('investments.create') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Investment
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Current Value</div>
+      <div class="stat-value stat-accent">{{ summary.current | inr }}</div>
+      <div class="stat-meta">{{ summary.count }} holdings</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Invested</div>
+      <div class="stat-value">{{ summary.invested | inr }}</div>
+      <div class="stat-meta">Cost basis</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Gain / Loss</div>
+      <div class="stat-value {% if summary.gain >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+        {{ summary.gain | inr }}
+      </div>
+      <div class="stat-meta">{{ summary.return_pct }}% return</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Monthly contributions</div>
+      <div class="stat-value stat-info">{{ summary.monthly_sip | inr }}</div>
+      <div class="stat-meta">SIPs, EPF, NPS…</div>
+    </div>
+  </div>
+</div>
+
+{% if summary.sip_status.plan_count %}
+<div class="glass-card mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+    <div>
+      <h2 class="section-title mb-0">Monthly board · {{ summary.sip_status.label }}</h2>
+      <p class="page-subtitle mb-0 mt-1">Follows today’s calendar month automatically (resets each new month).</p>
+    </div>
+    <div class="stat-meta">
+      {{ summary.sip_status.posted_count }} posted ·
+      {{ summary.sip_status.ready_count }} ready ·
+      {{ summary.sip_status.skipped_count }} paused/incomplete
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="fos-table">
+      <thead>
+        <tr>
+          <th>Holding</th>
+          <th>Type</th>
+          <th>Day</th>
+          <th>From</th>
+          <th>Amount</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in summary.sip_status.rows %}
+          <tr>
+            <td class="desc-cell">{{ row.investment.name }}</td>
+            <td><span class="badge-type badge-investment">{{ asset_labels.get(row.investment.asset_type, row.investment.asset_type) }}</span></td>
+            <td>{% if row.investment.sip_day %}{{ row.investment.sip_day }}{% else %}—{% endif %}</td>
+            <td>
+              {% if row.investment.source_account %}
+                {{ row.investment.source_account.name }}
+              {% elif row.investment.asset_type == 'epf' %}
+                <span class="stat-meta">Salary (non-cash)</span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="amount-cell">{{ row.amount | inr }}</td>
+            <td>
+              {% if row.status == 'posted' %}
+                <span class="badge-type badge-income">Posted</span>
+              {% elif row.status == 'ready' %}
+                <span class="badge-type badge-investment">Ready</span>
+              {% else %}
+                <span class="badge-type badge-expense">{{ row.reasons | join(', ') }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-5">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Allocation</h2>
+      {% if summary.allocation %}
+        <div class="chart-container">
+          <canvas id="allocChart"></canvas>
+        </div>
+      {% else %}
+        <div class="empty-state"><i class="bi bi-pie-chart"></i><div>Add holdings to see allocation</div></div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="glass-card h-100">
+      <h2 class="section-title">By Type</h2>
+      {% if summary.allocation %}
+        {% for row in summary.allocation %}
+          <button type="button"
+                  class="account-row account-row-link holding-type-row"
+                  data-filter-type="{{ row.type }}"
+                  style="width:100%; text-align:left; background:transparent; border:none; cursor:pointer">
+            <div>
+              <div class="account-name">{{ row.label }}</div>
+              <div class="account-type">{{ row.count }} holding{{ 's' if row.count != 1 else '' }} · {{ row.pct }}%</div>
+            </div>
+            <div class="amount-cell">{{ row.current | inr }}</div>
+          </button>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state py-3"><div>No investments yet</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="glass-card" id="holdings">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="section-title mb-0">Holdings</h2>
+      <p class="page-subtitle mb-0 mt-1" id="holdingsSubtitle">
+        {% if edit_mode %}
+          Editing unlocked — click the pen on a holding to open its edit form.
+        {% else %}
+          Locked view. Click <strong>Edit holdings</strong> to unlock, then use the pen on a row.
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if edit_mode %}
+        <a href="{{ url_for('investments.index') }}#holdings" class="btn btn-ghost">
+          <i class="bi bi-lock me-1"></i> Lock
+        </a>
+      {% else %}
+        <a href="{{ url_for('investments.index', edit=1) }}#holdings" class="btn btn-accent">
+          <i class="bi bi-pencil me-1"></i> Edit holdings
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if filter_types %}
+    <div class="holding-filters mb-3" role="group" aria-label="Filter holdings by type">
+      <button type="button" class="holding-filter-chip is-active" data-filter-type="">
+        All <span class="holding-filter-count">{{ summary.count }}</span>
+      </button>
+      {% for ft in filter_types %}
+        <button type="button" class="holding-filter-chip" data-filter-type="{{ ft.type }}">
+          {{ ft.label }} <span class="holding-filter-count">{{ ft.count }}</span>
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if holdings %}
+      <div class="table-wrap">
+        <table class="fos-table" id="holdingsTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Owner</th>
+              <th>Invested</th>
+              <th>Current</th>
+              <th>NAV</th>
+              <th>Gain</th>
+              <th>Monthly</th>
+              <th>Day</th>
+              <th>From</th>
+              <th>Goal</th>
+              {% if edit_mode %}<th></th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for inv in holdings %}
+              <tr data-asset-type="{{ inv.asset_type }}">
+                <td class="desc-cell">
+                  {{ inv.name }}
+                  {% if inv.scheme_code %}
+                    <span class="stat-meta d-block">
+                      {{ inv.scheme_code }}
+                      {% if inv.units %} · {{ '%.4f'|format(inv.units|float) }} u{% endif %}
+                    </span>
+                  {% endif %}
+                </td>
+                <td><span class="badge-type badge-investment">{{ asset_labels.get(inv.asset_type, inv.asset_type) }}</span></td>
+                <td>{{ inv.owner | capitalize }}</td>
+                <td class="amount-cell">{{ inv.invested_amount | inr }}</td>
+                <td class="amount-cell">{{ inv.current_value | inr }}</td>
+                <td class="stat-meta">
+                  {% if inv.last_nav %}
+                    {{ '%.2f'|format(inv.last_nav|float) }}
+                    {% if inv.last_nav_date %}
+                      <span class="d-block">{{ inv.last_nav_date.strftime('%d %b') }}</span>
+                    {% endif %}
+                  {% else %}—{% endif %}
+                </td>
+                <td class="amount-cell {% if inv.gain >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+                  {{ inv.gain | inr }}
+                  <span class="stat-meta d-block">{{ '%.1f'|format(inv.return_pct) }}%</span>
+                </td>
+                <td class="amount-cell">
+                  {% if inv.monthly_sip %}
+                    {{ inv.monthly_sip | inr }}
+                    {% if not inv.sip_active %}
+                      <span class="stat-meta d-block">Paused</span>
+                    {% endif %}
+                  {% else %}—{% endif %}
+                </td>
+                <td class="stat-meta text-center">
+                  {% if inv.monthly_sip and inv.sip_day %}{{ inv.sip_day }}{% else %}—{% endif %}
+                </td>
+                <td class="stat-meta">
+                  {% if inv.monthly_sip and inv.source_account %}
+                    {{ inv.source_account.name }}
+                  {% elif inv.monthly_sip and inv.asset_type == 'epf' %}
+                    Salary
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if inv.goal %}
+                    <span class="badge-type badge-goal"
+                          style="background: {{ inv.goal.color }}22; color: {{ inv.goal.color }}; font-weight: 650">
+                      {{ inv.goal.name }}
+                    </span>
+                  {% else %}—{% endif %}
+                </td>
+                {% if edit_mode %}
+                <td class="text-end text-nowrap">
+                  <a href="{{ url_for('investments.edit', inv_id=inv.id) }}" class="btn-icon" title="Edit holding">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                  <form method="post" action="{{ url_for('investments.delete', inv_id=inv.id) }}" class="d-inline"
+                        onsubmit="return confirm('Delete this investment?');">
+                    <button type="submit" class="btn-icon" title="Delete" style="color: var(--danger)">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state py-4 hidden" id="holdingsFilterEmpty">
+        <i class="bi bi-funnel"></i>
+        <div>No holdings in this type</div>
+        <button type="button" class="btn btn-ghost btn-sm mt-2" data-filter-type="">Show all</button>
+      </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-graph-up-arrow"></i>
+      <div>No investments yet — add your first holding</div>
+      <a href="{{ url_for('investments.create') }}" class="btn btn-accent mt-3">Add Investment</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.INVEST_DATA = {{ summary.allocation | tojson }};
+  window.HOLDINGS_FILTER = {
+    labels: {{ asset_labels | tojson }},
+    editMode: {{ 'true' if edit_mode else 'false' }},
+    defaultSubtitle: {{ (
+      'Editing unlocked — click the pen on a holding to open its edit form.'
+      if edit_mode else
+      'Locked view. Click Edit holdings to unlock, then use the pen on a row.'
+    ) | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/investments.js') }}?v=2"></script>
+{% endblock %}

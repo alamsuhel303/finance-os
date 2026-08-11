@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Insurance</h1>
+    <p class="page-subtitle">Cover, premiums, and renewals</p>
+  </div>
+  <a href="{{ url_for('insurance.create') }}" class="btn btn-accent">
+    <i class="bi bi-plus-lg me-1"></i> Add Policy
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Active Policies</div>
+      <div class="stat-value">{{ overview.count }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Total Cover</div>
+      <div class="stat-value stat-accent">{{ overview.total_cover | inr }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Annual Premium</div>
+      <div class="stat-value">{{ overview.annual_premium | inr }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Renewals Due</div>
+      <div class="stat-value {% if overview.due_soon_count %}stat-warning{% endif %}">{{ overview.due_soon_count }}</div>
+      <div class="stat-meta">Within 30 days or overdue</div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card">
+  <h2 class="section-title">Policies</h2>
+  {% if overview.policies %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Policy</th>
+            <th>Type</th>
+            <th>Cover</th>
+            <th>Premium</th>
+            <th>Renewal</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in overview.policies %}
+            <tr {% if not p.is_active %}style="opacity:0.5"{% endif %}>
+              <td class="desc-cell">
+                <div>{{ p.name }}</div>
+                <div class="stat-meta">
+                  {% if p.insurer %}{{ p.insurer }}{% endif %}
+                  {% if p.policy_number %} · {{ p.policy_number }}{% endif %}
+                  · {{ p.owner | capitalize }}
+                </div>
+              </td>
+              <td><span class="badge-type badge-transfer">{{ policy_labels.get(p.policy_type, p.policy_type) }}</span></td>
+              <td class="amount-cell">{{ p.cover_amount | inr }}</td>
+              <td class="amount-cell">
+                {{ p.premium_amount | inr }}
+                <div class="stat-meta">{{ frequency_labels.get(p.premium_frequency, p.premium_frequency) }}</div>
+              </td>
+              <td>
+                {% if p.next_renewal_date %}
+                  {{ p.next_renewal_date.strftime('%d %b %Y') }}
+                  {% if p.renewal_status == 'overdue' %}
+                    <span class="badge-type badge-expense">Overdue</span>
+                  {% elif p.renewal_status == 'due_soon' %}
+                    <span class="badge-type badge-expense">Due soon</span>
+                  {% endif %}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('insurance.edit', policy_id=p.id) }}" class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="{{ url_for('insurance.delete', policy_id=p.id) }}" class="d-inline"
+                      onsubmit="return confirm('Delete this policy?')">
+                  <button type="submit" class="btn-icon" title="Delete"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-shield-check"></i>
+      <div>No policies yet — add health, term, or vehicle cover</div>
+      <a href="{{ url_for('insurance.create') }}" class="btn btn-accent mt-3">Add Policy</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

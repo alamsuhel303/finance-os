@@ -1,0 +1,240 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Reports</h1>
+    <p class="page-subtitle">{{ summary.label }} · Income, spend, and savings deep dive</p>
+  </div>
+</div>
+
+{# —— Period selector —— #}
+<div class="glass-card mb-4">
+  <form method="get" class="filter-bar">
+    <div>
+      <label class="form-label">Period</label>
+      <select name="period" class="form-select" onchange="this.form.submit()">
+        <option value="monthly" {% if summary.period == 'monthly' %}selected{% endif %}>Monthly</option>
+        <option value="quarterly" {% if summary.period == 'quarterly' %}selected{% endif %}>Quarterly</option>
+        <option value="yearly" {% if summary.period == 'yearly' %}selected{% endif %}>Yearly</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Year</label>
+      <select name="year" class="form-select" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y }}" {% if summary.year == y %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if summary.period == 'monthly' %}
+      <div>
+        <label class="form-label">Month</label>
+        <select name="month" class="form-select" onchange="this.form.submit()">
+          {% for m in range(1, 13) %}
+            <option value="{{ m }}" {% if summary.month == m %}selected{% endif %}>
+              {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    {% elif summary.period == 'quarterly' %}
+      <div>
+        <label class="form-label">Quarter</label>
+        <select name="quarter" class="form-select" onchange="this.form.submit()">
+          {% for q in range(1, 5) %}
+            <option value="{{ q }}" {% if summary.quarter == q %}selected{% endif %}>Q{{ q }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+  </form>
+</div>
+
+{# —— KPI strip —— #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Income</div>
+      <div class="stat-value stat-positive">{{ summary.income | inr }}</div>
+      <div class="stat-meta">
+        vs {{ comparison.prev_label }}:
+        <span class="{% if comparison.income.change >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+          {{ comparison.income.pct }}%
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <a href="{{ url_for('reports.expenses_detail', period=summary.period, year=summary.year, month=summary.month, quarter=summary.quarter) }}"
+       class="glass-card stat-card stat-card-link"
+       title="View transactions in Net Expenses">
+      <div class="stat-label">Net Expenses</div>
+      <div class="stat-value stat-negative">{{ summary.net_expenses | inr }}</div>
+      <div class="stat-meta">
+        vs prior:
+        <span class="{% if comparison.expenses.change <= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+          {{ comparison.expenses.pct }}%
+        </span>
+        · tap for transactions
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Invested</div>
+      <div class="stat-value stat-info">{{ summary.investments | inr }}</div>
+      <div class="stat-meta">{{ summary.invest_rate }}% of income</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Savings</div>
+      <div class="stat-value {% if summary.savings_rate >= 20 %}stat-positive{% elif summary.savings_rate >= 0 %}stat-warning{% else %}stat-negative{% endif %}">
+        {{ summary.savings | inr }}
+      </div>
+      <div class="stat-meta">{{ summary.savings_rate }}% savings rate · {{ summary.transaction_count }} txns</div>
+    </div>
+  </div>
+</div>
+
+{# —— Charts —— #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="glass-card">
+      <h2 class="section-title">Cashflow Trend</h2>
+      <div class="chart-container chart-tall">
+        <canvas id="cashflowChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="glass-card">
+      <h2 class="section-title">Expense Mix</h2>
+      {% if summary.by_category %}
+        <div class="chart-container">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      {% else %}
+        <div class="empty-state"><i class="bi bi-pie-chart"></i><div>No expenses in this period</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Need vs Want</h2>
+      <div class="split-stat mb-3">
+        <div>
+          <div class="stat-label">Needs</div>
+          <div class="amount-cell">{{ summary.need_want.need | inr }}</div>
+        </div>
+        <div>
+          <div class="stat-label">Wants</div>
+          <div class="amount-cell">{{ summary.need_want.want | inr }}</div>
+        </div>
+      </div>
+      {% set need = summary.need_want.need %}
+      {% set want = summary.need_want.want %}
+      {% set nw_total = need + want %}
+      {% if nw_total > 0 %}
+        <div class="progress stacked">
+          <div class="progress-bar progress-ok" style="width: {{ (need / nw_total * 100) }}%"></div>
+          <div class="progress-bar progress-watch" style="width: {{ (want / nw_total * 100) }}%"></div>
+        </div>
+        <div class="stat-meta mt-2">{{ ((need / nw_total) * 100) | round(0) | int }}% needs · {{ ((want / nw_total) * 100) | round(0) | int }}% wants</div>
+      {% else %}
+        <div class="stat-meta">No need/want tagged expenses</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Paid By</h2>
+      <div class="account-row">
+        <div class="account-name">Self</div>
+        <div class="amount-cell">{{ summary.paid_by.self | inr }}</div>
+      </div>
+      <div class="account-row">
+        <div class="account-name">Wife</div>
+        <div class="amount-cell">{{ summary.paid_by.wife | inr }}</div>
+      </div>
+      <div class="account-row">
+        <div class="account-name">Joint</div>
+        <div class="amount-cell">{{ summary.paid_by.joint | inr }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Category Breakdown</h2>
+      {% if summary.by_category %}
+        {% for cat in summary.by_category[:8] %}
+          <div class="account-row">
+            <span class="category-pill">
+              <span class="category-dot" style="background: {{ cat.color }}"></span>
+              {{ cat.name }}
+            </span>
+            <span class="amount-cell">{{ cat.total | inr }}</span>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state py-3"><div>No category spend yet</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# —— Top expenses —— #}
+<div class="glass-card">
+  <h2 class="section-title">Largest Expenses</h2>
+  {% if top_expenses %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Paid By</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for txn in top_expenses %}
+            <tr>
+              <td>{{ txn.date.strftime('%d %b %Y') }}</td>
+              <td class="desc-cell">{{ txn.description }}</td>
+              <td>
+                {% if txn.category %}
+                  <span class="category-pill">
+                    <span class="category-dot" style="background: {{ txn.category.color }}"></span>
+                    {{ txn.category.name }}
+                  </span>
+                {% else %}—{% endif %}
+              </td>
+              <td>{{ txn.paid_by | capitalize }}</td>
+              <td class="amount-cell stat-negative">{{ txn.amount | inr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state"><i class="bi bi-inbox"></i><div>No expenses in this period</div></div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.REPORT_DATA = {
+    cashflow: {{ cashflow | tojson }},
+    categories: {{ summary.by_category | tojson }},
+    currency: {{ currency | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

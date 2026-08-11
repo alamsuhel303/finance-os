@@ -1,0 +1,237 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Net Worth</h1>
+    <p class="page-subtitle">Assets, liabilities, and monthly growth</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('networth.liability_create') }}" class="btn btn-ghost">
+      <i class="bi bi-plus-lg me-1"></i> Add Liability
+    </a>
+    <form method="post" action="{{ url_for('networth.snapshot') }}">
+      <button type="submit" class="btn btn-accent">
+        <i class="bi bi-camera me-1"></i> Record Snapshot
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Net Worth</div>
+      <div class="stat-value stat-accent">{{ live.net_worth | inr }}</div>
+      <div class="stat-meta">Live · assets − liabilities</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Total Assets</div>
+      <div class="stat-value stat-positive">{{ live.total_assets | inr }}</div>
+      <div class="stat-meta">Cash {{ live.cash_savings | inr }} · Invest {{ live.investments | inr }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Liabilities</div>
+      <div class="stat-value {% if live.liabilities > 0 %}stat-negative{% endif %}">{{ live.liabilities | inr }}</div>
+      <div class="stat-meta">{{ live.liability_rows|length }} loan{{ 's' if live.liability_rows|length != 1 else '' }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Monthly Growth</div>
+      {% if growth.monthly_growth is not none %}
+        <div class="stat-value {% if growth.monthly_growth >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+          {{ growth.monthly_growth | inr }}
+        </div>
+        <div class="stat-meta">{{ growth.monthly_pct }}% vs prior snapshot</div>
+      {% else %}
+        <div class="stat-value" style="font-size:1.1rem">—</div>
+        <div class="stat-meta">Record 2+ snapshots to compare</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if growth.yearly_growth is not none %}
+  <div class="glass-card mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <div class="stat-label mb-1">Yearly Growth</div>
+        <div class="stat-value {% if growth.yearly_growth >= 0 %}stat-positive{% else %}stat-negative{% endif %}" style="font-size:1.35rem">
+          {{ growth.yearly_growth | inr }}
+          <span class="stat-meta">({{ growth.yearly_pct }}%)</span>
+        </div>
+      </div>
+      <div class="stat-meta">Based on earliest / ~12-month snapshot vs live</div>
+    </div>
+  </div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="glass-card">
+      <h2 class="section-title">Net Worth Trend</h2>
+      {% if growth.chart %}
+        <div class="chart-container chart-tall">
+          <canvas id="nwChart"></canvas>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-bar-chart-line"></i>
+          <div>Record a monthly snapshot to start the growth chart</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="glass-card">
+      <h2 class="section-title">Asset Allocation</h2>
+      {% if live.allocation %}
+        <div class="chart-container">
+          <canvas id="allocNwChart"></canvas>
+        </div>
+      {% else %}
+        <div class="empty-state"><div>No assets yet</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title mb-0">Cash accounts</h2>
+        <a href="{{ url_for('accounts.index') }}" class="stat-meta">Accounts</a>
+      </div>
+      <p class="page-subtitle mb-3">Active balances only · inactive &amp; empty funds hidden</p>
+      {% for acc in live.accounts %}
+        <div class="account-row">
+          <div>
+            <div class="account-name">{{ acc.name }}</div>
+            <div class="account-type">{{ acc.account_type }} · {{ acc.owner }}</div>
+          </div>
+          <div class="amount-cell">{{ acc.current_balance | inr }}</div>
+        </div>
+      {% else %}
+        <div class="empty-state py-3"><div>No active cash balances</div></div>
+      {% endfor %}
+      <div class="stat-meta mt-3">Total cash {{ live.cash_savings | inr }}</div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title mb-0">Investments</h2>
+        <a href="{{ url_for('investments.index') }}" class="stat-meta">Open</a>
+      </div>
+      <p class="page-subtitle mb-3">Active holdings · feeds the Invest total above</p>
+      {% if live.investment_rows %}
+        {% for inv in live.investment_rows %}
+          <div class="account-row">
+            <div>
+              <div class="account-name">{{ inv.name }}</div>
+              <div class="account-type">{{ inv.asset_type | replace('_', ' ') }}</div>
+            </div>
+            <div class="amount-cell">{{ inv.current_value | inr }}</div>
+          </div>
+        {% endfor %}
+        {% if live.investment_account_cash and live.investment_account_cash > 0 %}
+          <div class="account-row">
+            <div>
+              <div class="account-name">Investment account cash</div>
+              <div class="account-type">Idle cash waiting to invest</div>
+            </div>
+            <div class="amount-cell">{{ live.investment_account_cash | inr }}</div>
+          </div>
+        {% endif %}
+        <div class="stat-meta mt-3">Total investments {{ live.investments | inr }}</div>
+      {% else %}
+        <div class="empty-state py-3">
+          <div>No active investments</div>
+          <a href="{{ url_for('investments.create') }}" class="btn btn-ghost btn-sm mt-2">Add holding</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title mb-0">Liabilities</h2>
+        <a href="{{ url_for('networth.liability_create') }}" class="btn btn-ghost btn-sm">Add</a>
+      </div>
+      {% if live.liability_rows %}
+        {% for liab in live.liability_rows %}
+          <div class="account-row">
+            <div>
+              <div class="account-name">{{ liab.name }}</div>
+              <div class="account-type">{{ liab.liability_type | replace('_', ' ') }}
+                {% if liab.interest_rate %}· {{ liab.interest_rate }}%{% endif %}
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="amount-cell stat-negative">{{ liab.outstanding_amount | inr }}</span>
+              <a href="{{ url_for('networth.liability_edit', lid=liab.id) }}" class="btn-icon"><i class="bi bi-pencil"></i></a>
+              <form method="post" action="{{ url_for('networth.liability_delete', lid=liab.id) }}" onsubmit="return confirm('Delete this liability?')">
+                <button type="submit" class="btn-icon"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state py-3"><div>No liabilities — debt-free or not tracked yet</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="glass-card">
+  <h2 class="section-title">Snapshot History</h2>
+  {% if growth.snapshots %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Cash</th>
+            <th>Investments</th>
+            <th>Liabilities</th>
+            <th>Net Worth</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in growth.snapshots %}
+            <tr>
+              <td>{{ s.snapshot_date.strftime('%b %Y') }}</td>
+              <td class="amount-cell">{{ s.cash_savings | inr }}</td>
+              <td class="amount-cell">{{ s.investments | inr }}</td>
+              <td class="amount-cell">{{ s.liabilities | inr }}</td>
+              <td class="amount-cell desc-cell">{{ s.net_worth | inr }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-camera"></i>
+      <div>No snapshots yet — hit “Record Snapshot” to lock this month’s net worth</div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.NW_DATA = {
+    chart: {{ growth.chart | tojson }},
+    allocation: {{ live.allocation | tojson }},
+    currency: {{ currency | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/networth.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,408 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Budget</h1>
+    <p class="page-subtitle">
+      {{ overview.month_label }} · Household spend plan (Rent, Groceries, Utilities…).
+      Shopping / Travel / Lifestyle live on
+      <a href="{{ url_for('envelopes.index') }}">Envelopes</a>, not here.
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('budget.index', year=prev.year, month=prev.month) }}" class="btn btn-ghost">
+      <i class="bi bi-chevron-left"></i>
+    </a>
+    <a href="{{ url_for('budget.index', year=nxt.year, month=nxt.month) }}" class="btn btn-ghost">
+      <i class="bi bi-chevron-right"></i>
+    </a>
+    {% if not overview.needs_setup and not edit_mode %}
+    <form method="post" action="{{ url_for('budget.copy_previous') }}" class="d-inline">
+      <input type="hidden" name="year" value="{{ overview.year }}">
+      <input type="hidden" name="month" value="{{ overview.month }}">
+      <button type="submit" class="btn btn-ghost" title="Re-copy limits from the last month that had budgets">
+        <i class="bi bi-copy me-1"></i> Reset from previous
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if overview.needs_setup %}
+  <div class="glass-card mb-4" style="border-color: var(--warning)">
+    <h2 class="section-title mb-2">Set your first month’s budgets</h2>
+    <p class="page-subtitle mb-0">
+      No prior category limits found. Enter amounts below and save once —
+      later months will copy these automatically.
+    </p>
+  </div>
+{% elif overview.auto_copied %}
+  <div class="alert alert-success mb-4" role="status">
+    Carried forward {{ overview.copied_count }} categor{{ 'y' if overview.copied_count == 1 else 'ies' }}
+    from <strong>{{ overview.source_label }}</strong>. Click <strong>Edit budget</strong> to customize.
+  </div>
+{% endif %}
+
+{# —— Summary strip —— #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Category limits</div>
+      <div class="stat-value">{{ overview.total_budgeted | inr }}</div>
+      <div class="stat-meta">
+        Sum of limits you set · {{ overview.categories_with_budget }} categories
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a href="{{ url_for('budget.spent_detail', year=overview.year, month=overview.month) }}"
+       class="glass-card stat-card stat-card-link"
+       title="View transactions counted in Spent">
+      <div class="stat-label">Spent</div>
+      <div class="stat-value {% if overview.overall_status == 'over' %}stat-negative{% else %}stat-warning{% endif %}">
+        {{ overview.total_actual | inr }}
+      </div>
+      <div class="stat-meta">{{ overview.overall_progress }}% of limits · tap for transactions</div>
+    </a>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Remaining</div>
+      <div class="stat-value {% if overview.total_remaining >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+        {{ overview.total_remaining | inr }}
+      </div>
+      <div class="stat-meta">
+        {% if overview.over_count %}{{ overview.over_count }} over budget{% else %}On track{% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Discipline</div>
+      <div class="stat-value {% if overview.overall_status == 'ok' %}stat-positive{% elif overview.overall_status == 'watch' %}stat-warning{% else %}stat-negative{% endif %}">
+        {% if overview.overall_status == 'ok' %}Healthy
+        {% elif overview.overall_status == 'watch' %}Watch
+        {% elif overview.total_budgeted == 0 %}Unset
+        {% else %}Over{% endif %}
+      </div>
+      <div class="stat-meta">
+        <div class="progress mt-2"><div class="progress-bar progress-{{ overview.overall_status }}" style="width: {{ overview.overall_progress }}%"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Envelopes live on their own page — Budget is category spend limits only #}
+<div class="glass-card mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <h2 class="section-title mb-1">Joint purpose pots (Envelopes)</h2>
+      <p class="page-subtitle mb-0">
+        <strong>Budget</strong> = monthly limits (any account).
+        <strong>Envelopes</strong> = labels on Joint cash only — funded when you
+        <a href="{{ url_for('settings.joint_funding_edit') }}">Fund Joint</a>.
+        Suhel/Seema spends count in Budget, not in envelopes.
+      </p>
+    </div>
+    <a href="{{ url_for('envelopes.index') }}" class="btn btn-ghost btn-sm">Open Envelopes</a>
+  </div>
+  {% if funding_gaps %}
+    <div class="alert alert-warning mt-3 mb-0" role="status">
+      {% for gap in funding_gaps %}
+        <div{% if not loop.last %} class="mb-2"{% endif %}>
+          <strong>{{ gap.envelope.name }}</strong> pot is underfunded:
+          budget for {{ gap.categories | join(', ') }} is {{ gap.budgeted | inr }},
+          but available in the pot is {{ gap.available | inr }}
+          {% if gap.balance < 0 %}
+            (balance {{ gap.balance | inr }} — already overspent).
+          {% else %}
+            (short ~{{ gap.shortfall | inr }}).
+          {% endif %}
+        </div>
+      {% endfor %}
+      <a href="{{ url_for('settings.joint_funding_edit') }}" class="btn btn-ghost btn-sm mt-2">Add to Fund Joint plan</a>
+    </div>
+  {% endif %}
+</div>
+
+<div class="glass-card mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="section-title mb-0">Household Budget</h2>
+      <p class="page-subtitle mb-0 mt-1">
+        {% if edit_mode %}
+          Editing unlocked — change names/amounts, add or remove rows, then save to lock.
+        {% else %}
+          Locked view — click a category for transactions.
+          This plan is Essentials (~₹1.5L). Dining/movies → fund Lifestyle envelope (not here).
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if edit_mode %}
+        <a href="{{ url_for('budget.index', year=overview.year, month=overview.month) }}" class="btn btn-ghost">
+          Cancel
+        </a>
+        <button type="submit" form="budgetEditForm" class="btn btn-accent">
+          <i class="bi bi-check-lg me-1"></i> Save &amp; lock
+        </button>
+      {% else %}
+        <a href="{{ url_for('budget.index', year=overview.year, month=overview.month, edit=1) }}" class="btn btn-accent">
+          <i class="bi bi-pencil me-1"></i> Edit budget
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if overview.uncategorized and overview.uncategorized > 0 %}
+    <div class="alert alert-danger mb-3">
+      Uncategorized expenses this month: {{ overview.uncategorized | inr }}
+    </div>
+  {% endif %}
+
+  {% if edit_mode %}
+  <form method="post" action="{{ url_for('budget.save') }}" id="budgetEditForm">
+    <input type="hidden" name="year" value="{{ overview.year }}">
+    <input type="hidden" name="month" value="{{ overview.month }}">
+
+    <div class="table-wrap">
+      <table class="fos-table budget-table">
+        <thead>
+          <tr>
+            <th style="min-width:260px">Name</th>
+            <th>Budget</th>
+            <th>Actual</th>
+            <th>Remaining</th>
+            <th style="min-width:120px">Progress</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in overview.display_rows %}
+            <tr class="budget-row status-{{ row.status }}">
+              <td>
+                <div class="budget-name-cell">
+                  <span class="category-dot" style="background: {{ row.category.color }}"></span>
+                  <div class="budget-name-stack">
+                    <input type="text"
+                           class="form-control budget-name-input"
+                           name="name_{{ row.category.id }}"
+                           value="{{ row.category.name }}"
+                           maxlength="100"
+                           required>
+                    {% if row.hint %}
+                    <div class="budget-cat-hint">{{ row.hint }}</div>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="input-prefix">
+                  <span>{{ currency_symbol }}</span>
+                  <input type="text"
+                         name="amount_{{ row.category.id }}"
+                         value="{% if row.budgeted > 0 %}{{ '%.2f'|format(row.budgeted|float) }}{% endif %}"
+                         class="form-control budget-input"
+                         inputmode="decimal"
+                         placeholder="0">
+                </div>
+              </td>
+              <td class="amount-cell {% if row.actual > 0 %}text-danger-soft{% endif %}">
+                {{ row.actual | inr }}
+              </td>
+              <td class="amount-cell {% if row.remaining < 0 %}stat-negative{% elif row.budgeted > 0 %}stat-positive{% endif %}">
+                {% if row.budgeted > 0 or row.actual > 0 %}{{ row.remaining | inr }}{% else %}—{% endif %}
+              </td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress flex-grow-1">
+                    <div class="progress-bar progress-{{ row.status }}" style="width: {{ row.progress }}%"></div>
+                  </div>
+                  <span class="budget-pct">
+                    {% if row.budgeted > 0 %}{{ row.progress | int }}%{% else %}—{% endif %}
+                  </span>
+                </div>
+              </td>
+              <td class="text-end">
+                {% if row.budget_id %}
+                  <button type="submit"
+                          formaction="{{ url_for('budget.remove_row') }}"
+                          name="category_id"
+                          value="{{ row.category.id }}"
+                          class="btn-icon"
+                          title="Remove row"
+                          style="color: var(--danger)"
+                          onclick="return confirm('Remove this row from this month’s budget?');">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="stat-meta py-3">No budget rows yet — add one below.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-3">
+      <a href="{{ url_for('budget.index', year=overview.year, month=overview.month) }}" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-accent">
+        <i class="bi bi-check-lg me-1"></i> Save &amp; lock
+      </button>
+    </div>
+  </form>
+
+  {% else %}
+  {# Locked read-only view #}
+  <div class="table-wrap">
+    <table class="fos-table budget-table budget-table-locked">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="text-end">Budget</th>
+          <th class="text-end">Actual</th>
+          <th class="text-end">Remaining</th>
+          <th style="min-width:140px">Progress</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in overview.display_rows %}
+          <tr class="budget-row status-{{ row.status }}">
+            <td>
+              <a href="{{ url_for('budget.category_detail', category_id=row.category.id, year=overview.year, month=overview.month) }}"
+                 class="budget-cat-link">
+                <div class="budget-name-stack">
+                  <span class="category-pill">
+                    <span class="category-dot" style="background: {{ row.category.color }}"></span>
+                    {{ row.category.name }}
+                  </span>
+                  {% if row.hint %}
+                  <div class="budget-cat-hint">{{ row.hint }}</div>
+                  {% endif %}
+                </div>
+              </a>
+            </td>
+            <td class="text-end amount-cell">{{ row.budgeted | inr }}</td>
+            <td class="text-end amount-cell {% if row.actual > 0 %}text-danger-soft{% endif %}">
+              {{ row.actual | inr }}
+            </td>
+            <td class="text-end amount-cell {% if row.remaining < 0 %}stat-negative{% elif row.budgeted > 0 %}stat-positive{% endif %}">
+              {% if row.budgeted > 0 or row.actual > 0 %}{{ row.remaining | inr }}{% else %}—{% endif %}
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-grow-1">
+                  <div class="progress-bar progress-{{ row.status }}" style="width: {{ row.progress }}%"></div>
+                </div>
+                <span class="budget-pct">
+                  {% if row.budgeted > 0 %}{{ row.progress | int }}%{% else %}—{% endif %}
+                </span>
+              </div>
+            </td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="5" class="stat-meta py-3">
+              No budgets yet.
+              <a href="{{ url_for('budget.index', year=overview.year, month=overview.month, edit=1) }}">Edit budget</a>
+              to add rows.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if edit_mode %}
+<div class="glass-card mt-3">
+  <h2 class="section-title mb-2">Add budget row</h2>
+  <p class="page-subtitle mb-3">
+    Type a name (suggestions appear as you type) or pick from the dropdown, then set an amount.
+  </p>
+  <form method="post" action="{{ url_for('budget.add_row') }}" class="budget-add-form">
+    <input type="hidden" name="year" value="{{ overview.year }}">
+    <input type="hidden" name="month" value="{{ overview.month }}">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label" for="add_name">Name</label>
+        <input type="text"
+               class="form-control"
+               id="add_name"
+               name="name"
+               list="budgetCategorySuggestions"
+               placeholder="Type name or pick a suggestion…"
+               autocomplete="off"
+               required
+               maxlength="100">
+        <datalist id="budgetCategorySuggestions">
+          {% for cat in overview.addable_categories or overview.all_expense_categories %}
+            <option value="{{ cat.name }}"></option>
+          {% endfor %}
+        </datalist>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="add_category_id">Or choose existing</label>
+        <select class="form-select" id="add_category_id" name="category_id">
+          <option value="">— optional —</option>
+          {% for cat in overview.addable_categories %}
+            <option value="{{ cat.id }}"
+                    data-hint="{{ overview.category_hints.get(cat.id, '') }}"
+                    title="{{ overview.category_hints.get(cat.id, '') }}">{{ cat.name }}</option>
+          {% else %}
+            {% for cat in overview.all_expense_categories %}
+              <option value="{{ cat.id }}"
+                      data-hint="{{ overview.category_hints.get(cat.id, '') }}"
+                      title="{{ overview.category_hints.get(cat.id, '') }}">{{ cat.name }}</option>
+            {% endfor %}
+          {% endfor %}
+        </select>
+        <div class="budget-cat-hint mt-1" id="addCategoryHint"></div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="add_amount">Amount ({{ currency_symbol }})</label>
+        <input type="text" class="form-control" id="add_amount" name="amount"
+               inputmode="decimal" placeholder="0" required>
+        <div class="form-text amount-words" id="addAmountWords"></div>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-accent w-100">
+          <i class="bi bi-plus-lg me-1"></i> Add row
+        </button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if edit_mode %}
+<script src="{{ url_for('static', filename='js/amount-words.js') }}?v=1"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    window.fosBindAmountWords(
+      document.getElementById("add_amount"),
+      document.getElementById("addAmountWords")
+    );
+    const select = document.getElementById("add_category_id");
+    const nameInput = document.getElementById("add_name");
+    const hintEl = document.getElementById("addCategoryHint");
+    if (select && nameInput) {
+      const syncAddHint = () => {
+        const opt = select.options[select.selectedIndex];
+        if (opt && opt.value) nameInput.value = opt.textContent.trim();
+        if (hintEl) hintEl.textContent = (opt && opt.dataset.hint) || "";
+      };
+      select.addEventListener("change", syncAddHint);
+      syncAddHint();
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

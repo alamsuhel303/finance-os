@@ -1,0 +1,135 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Envelopes</h1>
+    <p class="page-subtitle">
+      Labels on Joint Account cash — not separate bank accounts, and not Budget limits.
+      Showing {{ overview.month_label }} activity · leftovers roll as carry forward.
+    </p>
+  </div>
+  <a href="{{ url_for('transactions.create') }}" class="btn btn-accent">
+    <i class="bi bi-plus-lg me-1"></i> Allocate via Transfer
+  </a>
+</div>
+
+<section class="envelope-section mb-4">
+  {% with envelopes=overview, show_header=true, show_summary=true %}
+    {% include "partials/envelope_overview.html" %}
+  {% endwith %}
+</section>
+
+<div class="glass-card mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
+    <div>
+      <h2 class="section-title mb-1">Move between pots</h2>
+      <p class="page-subtitle mb-0">
+        Correct a split after Fund Joint already posted.
+        Joint bank balance does not change; only purpose labels move.
+      </p>
+    </div>
+    {% if not move_unlocked %}
+      <a href="{{ url_for('envelopes.index', move=1) }}" class="btn btn-ghost btn-sm">
+        <i class="bi bi-unlock me-1"></i> Unlock move
+      </a>
+    {% else %}
+      <a href="{{ url_for('envelopes.index') }}" class="btn btn-ghost btn-sm">
+        Cancel
+      </a>
+    {% endif %}
+  </div>
+
+  {% if not move_unlocked %}
+    <div class="stat-meta mt-3">
+      Locked — unlock only when you need to fix envelope labels (e.g. after a Fund Joint plan change).
+    </div>
+  {% else %}
+    <form method="post" action="{{ url_for('envelopes.reallocate') }}" class="row g-3 align-items-end mt-2">
+      <div class="col-md-3">
+        <label class="form-label" for="from_envelope_id">From</label>
+        <select class="form-select" id="from_envelope_id" name="from_envelope_id" required>
+          <option value="">Select pot</option>
+          {% for env in envelopes %}
+            <option value="{{ env.id }}">
+              {{ env.name }} ({{ env.current_balance | inr }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="to_envelope_id">To</label>
+        <select class="form-select" id="to_envelope_id" name="to_envelope_id" required>
+          <option value="">Select pot</option>
+          {% for env in envelopes %}
+            <option value="{{ env.id }}">
+              {{ env.name }} ({{ env.current_balance | inr }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="realloc_amount">Amount</label>
+        <input type="text" class="form-control" id="realloc_amount" name="amount"
+               inputmode="decimal" value="" placeholder="0" required
+               data-amount-words="reallocAmountWords">
+        <div class="form-text amount-words" id="reallocAmountWords"></div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="realloc_notes">Note</label>
+        <input type="text" class="form-control" id="realloc_notes" name="notes"
+               value="" placeholder="Optional" maxlength="255">
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-accent w-100"
+                onclick="return confirm('Move this amount between envelope labels? Joint cash stays the same.');">
+          Move
+        </button>
+      </div>
+    </form>
+  {% endif %}
+</div>
+
+<section class="envelope-section">
+  <div class="mb-3">
+    <h2 class="section-title mb-1">Investment Purpose</h2>
+    <p class="page-subtitle mb-0">
+      Separate from Joint envelopes — holdings tagged to goals. Click a purpose for contribution history.
+    </p>
+  </div>
+
+  <div class="glass-card">
+    {% if investment_purpose %}
+      {% for row in investment_purpose %}
+        {% if row.goal_id %}
+          <a href="{{ url_for('goals.detail', goal_id=row.goal_id) }}" class="account-row account-row-link">
+            <span class="category-pill">
+              <span class="category-dot" style="background: {{ row.color }}"></span>
+              {{ row.name }}
+              <span class="account-type ms-1">{{ row.goal_type | replace('_',' ') }}</span>
+              {% if row.count %}<span class="account-type ms-1">· {{ row.count }} holding{{ 's' if row.count != 1 else '' }}</span>{% endif %}
+            </span>
+            <span class="amount-cell">{{ row.current | inr }} <i class="bi bi-chevron-right ms-1" style="opacity:.5;font-size:.85em"></i></span>
+          </a>
+        {% else %}
+          <div class="account-row">
+            <span class="category-pill">
+              <span class="category-dot" style="background: {{ row.color }}"></span>
+              {{ row.name }}
+            </span>
+            <span class="amount-cell">{{ row.current | inr }}</span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <div class="empty-state py-3">
+        <div>Tag investments with a Goal to see purpose here</div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/amount-words.js') }}?v=3"></script>
+{% endblock %}

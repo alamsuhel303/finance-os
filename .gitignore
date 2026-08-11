@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.DS_Store
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.idea/
+.vscode/
+
+# Runtime database (keep folder via .gitkeep)
+database/*.db
+database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+database/.import_staging/
+
+# Backups may contain personal data
+backups/*.db
+backups/*.zip

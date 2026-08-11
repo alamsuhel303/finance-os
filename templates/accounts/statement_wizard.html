@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Statement balances</h1>
+    <p class="page-subtitle">
+      Enter what the bank shows as of a date. We adjust <strong>opening</strong> so books match
+      that statement — later transactions still count toward current.
+    </p>
+  </div>
+  <a href="{{ url_for('accounts.index') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card mb-3">
+  <p class="page-subtitle mb-0">
+    Leave a row blank to skip that account. This does <strong>not</strong> invent transactions —
+    it only sets opening (and current) so the implied balance on the statement date equals your bank.
+  </p>
+</div>
+
+<div class="glass-card form-card">
+  <form method="post" novalidate>
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="statement_date">Statement as of</label>
+        <input type="date" class="form-control" id="statement_date" name="statement_date"
+               value="{{ form_data.get('statement_date', '') }}" required>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Account</th>
+            <th>Books now</th>
+            <th>Statement balance ({{ currency }})</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for acc in accounts %}
+            <tr>
+              <td class="desc-cell">
+                {{ acc.name }}
+                <div class="stat-meta">{{ acc.account_type }} · {{ acc.owner }}</div>
+                <input type="hidden" name="account_id" value="{{ acc.id }}">
+              </td>
+              <td class="amount-cell">{{ acc.current_balance | inr }}</td>
+              <td style="min-width:10rem">
+                <input type="number" step="0.01" class="form-control" name="statement_balance"
+                       placeholder="Leave blank to skip">
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+      <button type="submit" class="btn btn-accent"
+              onclick="return confirm('Adjust opening balances so books match these statement figures?')">
+        <i class="bi bi-check-lg me-1"></i> Apply statement balances
+      </button>
+      <a href="{{ url_for('accounts.index') }}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

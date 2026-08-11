@@ -1,0 +1,106 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Goals</h1>
+    <p class="page-subtitle">Targets, progress, and estimated completion</p>
+  </div>
+  <a href="{{ url_for('goals.create') }}" class="btn btn-accent">
+    <i class="bi bi-plus-lg me-1"></i> Add Goal
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Active Goals</div>
+      <div class="stat-value">{{ overview.count }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Saved Toward Goals</div>
+      <div class="stat-value stat-positive">{{ overview.total_current | inr }}</div>
+      <div class="stat-meta">of {{ overview.total_target | inr }} target</div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Overall Progress</div>
+      <div class="stat-value stat-accent">{{ overview.overall_progress }}%</div>
+      <div class="progress mt-2"><div class="progress-bar progress-ok" style="width: {{ overview.overall_progress }}%"></div></div>
+    </div>
+  </div>
+</div>
+
+{% if overview.rows %}
+  <div class="row g-3">
+    {% for row in overview.rows %}
+      {% set g = row.goal %}
+      <div class="col-md-6 col-xl-4">
+        <div class="glass-card goal-card h-100">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div class="d-flex align-items-center gap-2">
+              <div class="goal-icon" style="background: {{ g.color }}22; color: {{ g.color }}">
+                <i class="bi {{ g.icon or 'bi-flag' }}"></i>
+              </div>
+              <div>
+                <a href="{{ url_for('goals.detail', goal_id=g.id) }}" class="account-name text-decoration-none" style="color: inherit">{{ g.name }}</a>
+                <div class="account-type">{{ g.goal_type | replace('_', ' ') | capitalize }} · {{ g.owner | capitalize }}</div>
+              </div>
+            </div>
+            <div class="dropdown">
+              <button class="btn-icon" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                <li><a class="dropdown-item" href="{{ url_for('goals.detail', goal_id=g.id) }}">History</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('goals.edit', goal_id=g.id) }}">Edit</a></li>
+                <li>
+                  <form method="post" action="{{ url_for('goals.delete', goal_id=g.id) }}" onsubmit="return confirm('Delete this goal?')">
+                    <button type="submit" class="dropdown-item text-danger">Delete</button>
+                  </form>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between mb-1">
+            <span class="amount-cell">{{ row.current | inr }}</span>
+            <span class="stat-meta">{{ row.target | inr }}</span>
+          </div>
+          <div class="progress mb-2">
+            <div class="progress-bar {% if row.status == 'done' %}progress-ok{% elif row.status == 'on_track' %}progress-watch{% else %}progress-ok{% endif %}"
+                 style="width: {{ row.progress }}%; {% if g.color %}background: {{ g.color }}{% endif %}"></div>
+          </div>
+          <div class="d-flex justify-content-between">
+            <span class="stat-meta">{{ row.progress }}% · {{ row.remaining | inr }} left</span>
+            <span class="stat-meta">
+              {% if row.progress >= 100 %}Done
+              {% elif row.eta %}ETA {{ row.eta.strftime('%b %Y') }}
+              {% else %}No ETA{% endif %}
+            </span>
+          </div>
+          {% if g.monthly_contribution and g.monthly_contribution > 0 %}
+            <div class="stat-meta mt-2">Contributing {{ g.monthly_contribution | inr }}/mo</div>
+          {% endif %}
+          {% if g.linked_account or row.holding_count %}
+            <div class="stat-meta mt-1">
+              {% if g.linked_account %}Cash: {{ g.linked_account.name }}{% endif %}
+              {% if g.linked_account and row.holding_count %} · {% endif %}
+              {% if row.holding_count %}{{ row.holding_count }} holding{{ 's' if row.holding_count != 1 else '' }}{% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="glass-card">
+    <div class="empty-state">
+      <i class="bi bi-flag"></i>
+      <div>No goals yet — set your first target</div>
+      <a href="{{ url_for('goals.create') }}" class="btn btn-accent mt-3">Add Goal</a>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

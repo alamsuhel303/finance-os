@@ -1,0 +1,107 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Budget spent</h1>
+    <p class="page-subtitle">
+      {{ activity.month_label }} · Every expense counted in the household Budget total
+      (all accounts; excludes Parents, Dining, Movies, Shopping, Travel).
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('budget.spent_detail', year=prev_year, month=prev_month) }}" class="btn btn-ghost btn-sm">← Prev</a>
+    <a href="{{ url_for('budget.spent_detail', year=next_year, month=next_month) }}" class="btn btn-ghost btn-sm">Next →</a>
+    <a href="{{ url_for('budget.index', year=activity.year, month=activity.month) }}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left me-1"></i> Budget
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Category limits</div>
+      <div class="stat-value">{{ activity.totals.budgeted | inr }}</div>
+      <div class="stat-meta">{{ activity.month_label }} plan</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Spent</div>
+      <div class="stat-value {% if activity.totals.status == 'over' %}stat-negative{% else %}stat-warning{% endif %}">
+        {{ activity.totals.spent | inr }}
+      </div>
+      <div class="stat-meta">{{ rows|length }} transaction{{ 's' if rows|length != 1 else '' }}</div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Remaining</div>
+      <div class="stat-value {% if activity.totals.remaining >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+        {{ activity.totals.remaining | inr }}
+      </div>
+      <div class="stat-meta">{{ activity.totals.progress | int }}% of limits used</div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card">
+  <h2 class="section-title">Transactions</h2>
+  {% if rows %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Account</th>
+            <th class="text-end">Amount</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for txn in rows %}
+            <tr>
+              <td class="text-nowrap">{{ txn.date.isoformat() }}</td>
+              <td class="desc-cell">{{ txn.description }}</td>
+              <td>
+                {% if txn.category %}
+                  <a href="{{ url_for('budget.category_detail', category_id=txn.category.id, year=activity.year, month=activity.month) }}"
+                     class="budget-cat-link">
+                    <span class="category-pill">
+                      <span class="category-dot" style="background: {{ txn.category.color }}"></span>
+                      {{ txn.category.name }}
+                    </span>
+                  </a>
+                {% else %}
+                  <span class="stat-meta">Uncategorized</span>
+                {% endif %}
+              </td>
+              <td class="stat-meta">
+                {% if txn.account %}{{ txn.account.name }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end amount-cell stat-negative">−{{ txn.amount | inr }}</td>
+              <td class="text-nowrap">
+                <a href="{{ url_for('transactions.edit', txn_id=txn.id) }}" class="btn-icon" title="Open transaction">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if activity.truncated %}
+      <div class="stat-meta mt-2">Showing first {{ rows|length }} transactions for this month.</div>
+    {% endif %}
+  {% else %}
+    <div class="empty-state py-4">
+      <i class="bi bi-inbox"></i>
+      <div>No budget expenses in {{ activity.month_label }}.</div>
+      <a href="{{ url_for('transactions.create', type='expense') }}" class="btn btn-accent btn-sm mt-2">Add expense</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

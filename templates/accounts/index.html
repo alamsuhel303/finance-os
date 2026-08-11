@@ -1,0 +1,240 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Accounts</h1>
+    <p class="page-subtitle">Real cash only · purpose/split lives under Envelopes (not Travel Fund / Lifestyle Fund rows)</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('accounts.statement_wizard') }}" class="btn btn-ghost">Statement wizard</a>
+    <a href="{{ url_for('envelopes.index') }}" class="btn btn-ghost">Envelopes</a>
+    <a href="{{ url_for('accounts.create') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Account
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Total Balance</div>
+      <div class="stat-value stat-accent">{{ total | inr }}</div>
+      <div class="stat-meta">All active accounts</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Envelope Allocated</div>
+      <div class="stat-value">{{ envelopes.total | inr }}</div>
+      <div class="stat-meta">Virtual purpose (see below)</div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Emergency Fund</div>
+      <div class="stat-value">{{ emergency.total | inr }}</div>
+      <div class="stat-meta">
+        Cash {{ emergency.cash_total | inr }}
+        · Invested {{ emergency.invest_total | inr }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card mb-3" style="border-left: 3px solid var(--accent, #5eead4)">
+  <h2 class="section-title">Emergency Fund = tags (no separate account)</h2>
+  <p class="page-subtitle mb-2">
+    Money stays in Suhel / Seema / Joint / FDs. You only <strong>tag</strong> how much of it
+    counts as emergency. No transfer. Health Score &amp; Goals use the total below.
+  </p>
+  <ul class="page-subtitle mb-0" style="padding-left: 1.25rem">
+    <li><strong>Cash:</strong> unlock with <strong>Edit emergency tags</strong>, set amounts, then Save &amp; lock.</li>
+    <li><strong>Investments:</strong> edit a holding → Purpose / Goal →
+      <strong>Emergency Fund</strong>
+      (<a href="{{ url_for('investments.index') }}">Investments</a>).
+    </li>
+  </ul>
+  {% if emergency.investment_rows %}
+    <div class="stat-meta mt-3 mb-0">
+      Investments tagged emergency:
+      {% for row in emergency.investment_rows %}
+        {{ row.investment.name }} ({{ row.value | inr }}){% if not loop.last %} · {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<div class="glass-card mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="section-title mb-0">Spending Accounts</h2>
+      <p class="page-subtitle mb-0 mt-1">
+        {% if edit_emergency %}
+          Emergency tags unlocked — update amounts, then save to lock.
+        {% else %}
+          Emergency tags locked. Click <strong>Edit emergency tags</strong> to change.
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      {% if edit_emergency %}
+        <a href="{{ url_for('accounts.index') }}" class="btn btn-ghost">Cancel</a>
+        <button type="submit" form="emergencyTagsForm" class="btn btn-accent">
+          <i class="bi bi-check-lg me-1"></i> Save &amp; lock
+        </button>
+      {% else %}
+        <a href="{{ url_for('accounts.index', edit_emergency=1) }}" class="btn btn-accent">
+          <i class="bi bi-pencil me-1"></i> Edit emergency tags
+        </a>
+      {% endif %}
+    </div>
+  </div>
+  {% if spending_accounts %}
+    {% if edit_emergency %}
+    <form method="post" action="{{ url_for('accounts.save_emergency_tags') }}" id="emergencyTagsForm" novalidate>
+    {% endif %}
+      <div class="table-wrap">
+        <table class="fos-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Type</th>
+              <th>Owner</th>
+              <th>Current Balance</th>
+              <th>Emergency tagged</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for acc in spending_accounts %}
+              <tr {% if not acc.is_active %}style="opacity:0.5"{% endif %}>
+                <td class="desc-cell">
+                  <a href="{{ url_for('transactions.list_transactions', account=acc.id) }}" class="account-link">
+                    {{ acc.name }}
+                  </a>
+                </td>
+                <td><span class="badge-type badge-transfer">{{ account_type_labels.get(acc.account_type, acc.account_type) }}</span></td>
+                <td>{{ acc.owner | capitalize }}</td>
+                <td class="amount-cell desc-cell">
+                  <a href="{{ url_for('transactions.list_transactions', account=acc.id) }}" class="account-link">
+                    {{ acc.current_balance | inr }}
+                  </a>
+                </td>
+                <td class="amount-cell" style="min-width:11rem">
+                  {% if edit_emergency and acc.is_active %}
+                    <input type="hidden" name="account_id" value="{{ acc.id }}">
+                    <input type="number" step="0.01" min="0" max="{{ acc.current_balance }}"
+                           class="form-control form-control-sm"
+                           name="emergency_tagged"
+                           value="{{ acc.emergency_tagged or 0 }}"
+                           data-amount-words="emWords{{ acc.id }}"
+                           placeholder="0">
+                    <div class="form-text amount-words" id="emWords{{ acc.id }}"></div>
+                  {% else %}
+                    {{ (acc.emergency_tagged or 0) | inr }}
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <a href="{{ url_for('accounts.edit', account_id=acc.id) }}" class="btn-icon" title="Edit account"><i class="bi bi-pencil"></i></a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
+        <div class="stat-meta">
+          Tagged cash: <strong>{{ emergency.cash_total | inr }}</strong>
+          · with investments: <strong>{{ emergency.total | inr }}</strong>
+        </div>
+        {% if edit_emergency %}
+          <button type="submit" class="btn btn-accent">
+            <i class="bi bi-check-lg me-1"></i> Save &amp; lock
+          </button>
+        {% endif %}
+      </div>
+    {% if edit_emergency %}
+    </form>
+    {% endif %}
+  {% endif %}
+</div>
+
+<div class="glass-card mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="section-title mb-0">Virtual Envelopes</h2>
+    <a href="{{ url_for('envelopes.index') }}" class="stat-meta">Open</a>
+  </div>
+  <p class="page-subtitle mb-3">
+    Purpose labels on Joint cash (not separate banks).
+    Joint {{ envelopes.joint_balance | inr }}
+    · Envelopes {{ envelopes.total | inr }}
+    {% if envelopes.is_balanced %}
+      · balanced
+    {% elif envelopes.difference > 0 %}
+      · {{ envelopes.difference | inr }} unlabelled
+    {% else %}
+      · over-allocated
+    {% endif %}
+  </p>
+  {% for row in envelopes.rows %}
+    <div class="account-row">
+      <span class="category-pill">
+        <span class="category-dot" style="background: {{ row.envelope.color }}"></span>
+        {{ row.envelope.name }}
+      </span>
+      <span class="amount-cell">{{ row.balance | inr }}</span>
+    </div>
+  {% else %}
+    <div class="stat-meta">No envelope allocations yet</div>
+  {% endfor %}
+</div>
+
+{% if fund_accounts %}
+<div class="glass-card">
+  <h2 class="section-title">Optional Fund Accounts</h2>
+  <p class="page-subtitle mb-3">
+    Travel / Home / Lifestyle funds only change if you transfer cash into them.
+    Emergency does <strong>not</strong> need a fund account — use tags above.
+  </p>
+  <div class="table-wrap">
+    <table class="fos-table">
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>Type</th>
+          <th>Current Balance</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for acc in fund_accounts %}
+          <tr {% if not acc.is_active %}style="opacity:0.5"{% endif %}>
+            <td class="desc-cell">
+              <a href="{{ url_for('transactions.list_transactions', account=acc.id) }}" class="account-link">
+                {{ acc.name }}
+              </a>
+            </td>
+            <td><span class="badge-type badge-investment">{{ account_type_labels.get(acc.account_type, acc.account_type) }}</span></td>
+            <td class="amount-cell">
+              <a href="{{ url_for('transactions.list_transactions', account=acc.id) }}" class="account-link">
+                {{ acc.current_balance | inr }}
+              </a>
+            </td>
+            <td class="text-end">
+              <a href="{{ url_for('accounts.edit', account_id=acc.id) }}" class="btn-icon" title="Edit account"><i class="bi bi-pencil"></i></a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if edit_emergency %}
+<script src="{{ url_for('static', filename='js/amount-words.js') }}?v=2"></script>
+{% endif %}
+{% endblock %}

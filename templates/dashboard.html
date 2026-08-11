@@ -1,0 +1,318 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">{{ summary.month_label }} · Your financial command center</p>
+  </div>
+  <div class="d-flex gap-2 align-items-center">
+    <button type="button" class="btn btn-ghost" id="privacyToggle" title="Show / hide sensitive amounts" aria-pressed="false">
+      <i class="bi bi-eye-slash" id="privacyToggleIcon"></i>
+      <span class="d-none d-sm-inline ms-1" id="privacyToggleLabel">Show amounts</span>
+    </button>
+    <a href="{{ url_for('checklist.index') }}" class="btn btn-ghost">
+      <i class="bi bi-calendar-check me-1"></i> Month
+    </a>
+    <a href="{{ url_for('transactions.create') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Transaction
+    </a>
+  </div>
+</div>
+
+{% if summary.reminders %}
+  <div class="mb-4">
+    {% for rem in summary.reminders %}
+      <div class="alert alert-{{ 'warning' if rem.severity == 'warning' else 'info' }} d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2" role="status">
+        <div>
+          <strong>{{ rem.title }}</strong>
+          <div class="stat-meta mb-0" style="opacity:0.9">{{ rem.detail }}</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          {% for action in rem.actions %}
+            {% if action.method == 'POST' %}
+              <form method="post" action="{{ url_for(action.url) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm {% if rem.severity == 'warning' %}btn-accent{% else %}btn-ghost{% endif %}">
+                  {{ action.label }}
+                </button>
+              </form>
+            {% else %}
+              <a href="{{ url_for(action.url) }}" class="btn btn-sm btn-ghost">{{ action.label }}</a>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{# —— Hero metrics —— #}
+<div class="row g-3 mb-4" id="dashboardHero">
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card delay-1">
+      <div class="stat-label">Net Worth</div>
+      <div class="stat-value stat-accent privacy-blur" data-privacy>{{ summary.net_worth | inr }}</div>
+      <div class="stat-meta">What you own minus what you owe</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card delay-2">
+      <div class="stat-label">Monthly Income</div>
+      <div class="stat-value stat-positive privacy-blur" data-privacy>{{ summary.monthly_income | inr }}</div>
+      <div class="stat-meta">Salary &amp; other income this month</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <a href="{{ url_for('reports.expenses_detail', period='monthly', year=summary.year, month=summary.month, from='dashboard') }}"
+       class="glass-card stat-card stat-card-link delay-3"
+       title="View this month’s expense transactions">
+      <div class="stat-label">Monthly Expenses</div>
+      <div class="stat-value stat-negative">{{ summary.monthly_expenses | inr }}</div>
+      <div class="stat-meta">Invested {{ summary.monthly_investments | inr }} · tap for transactions</div>
+    </a>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card delay-4">
+      <div class="stat-label">Joint left</div>
+      <div class="stat-value privacy-blur" data-privacy>{{ summary.joint_balance | inr }}</div>
+      <div class="stat-meta">
+        {{ summary.joint_account_name }} cash on hand
+        {% if summary.joint_unlabelled and summary.joint_unlabelled > 0 %}
+          · {{ summary.joint_unlabelled | inr }} unlabelled
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# —— Goals —— #}
+<div class="glass-card mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="section-title mb-0">Goals</h2>
+    <a href="{{ url_for('goals.index') }}" class="stat-meta">View all</a>
+  </div>
+  <div class="goal-board">
+    {% for card in summary.goal_cards %}
+      <div class="goal-mini">
+        <div class="d-flex justify-content-between align-items-baseline gap-2">
+          <span class="stat-label mb-0">{{ card.name }}</span>
+          <span class="amount-cell privacy-blur" data-privacy>{{ card.current | inr }}</span>
+        </div>
+        <div class="progress"><div class="progress-bar" style="width: {{ card.progress }}%"></div></div>
+        <div class="stat-meta">{{ card.meta }} · {{ card.progress }}%</div>
+      </div>
+    {% else %}
+      <div class="stat-meta">No goals yet</div>
+    {% endfor %}
+  </div>
+</div>
+
+{# —— Charts —— #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="glass-card">
+      <h2 class="section-title">Monthly Expenses</h2>
+      <div class="chart-container">
+        <canvas id="expenseTrendChart"
+                data-labels='{{ expense_trend | map(attribute="label") | list | tojson }}'
+                data-values='{{ expense_trend | map(attribute="total") | list | tojson }}'></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="glass-card">
+      <h2 class="section-title">Expense Categories</h2>
+      {% if expense_categories %}
+        <div class="chart-container">
+          <canvas id="categoryPieChart"
+                  data-labels='{{ expense_categories | map(attribute="name") | list | tojson }}'
+                  data-values='{{ expense_categories | map(attribute="total") | list | tojson }}'
+                  data-colors='{{ expense_categories | map(attribute="color") | list | tojson }}'></canvas>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-pie-chart d-block"></i>
+          <p class="mb-0">No expenses this month yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# —— Recent + Accounts —— #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="glass-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title mb-0">Recent Transactions</h2>
+        <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-ghost btn-sm">View all</a>
+      </div>
+      {% if summary.recent_transactions %}
+        <div class="table-wrap">
+          <table class="fos-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th class="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for txn in summary.recent_transactions %}
+              <tr>
+                <td>{{ txn.date.strftime('%d %b') }}</td>
+                <td class="desc-cell">{{ txn.description }}</td>
+                <td><span class="badge-type badge-{{ txn.transaction_type }}">{{ txn.transaction_type }}</span></td>
+                <td>
+                  {% if txn.category %}
+                    <span class="category-pill">
+                      <span class="category-dot" style="background: {{ txn.category.color }}"></span>
+                      {{ txn.category.name }}
+                    </span>
+                  {% else %}—{% endif %}
+                </td>
+                <td class="text-end amount-cell {% if txn.transaction_type in ['income', 'refund'] %}stat-positive{% elif txn.transaction_type in ['expense', 'investment'] %}stat-negative{% endif %}">
+                  {% if txn.transaction_type in ['income', 'refund'] %}+{% elif txn.transaction_type in ['expense', 'investment'] %}−{% endif %}{{ txn.amount | inr }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-receipt d-block"></i>
+          <p class="mb-2">No transactions yet.</p>
+          <a href="{{ url_for('transactions.create') }}" class="btn btn-accent btn-sm">Add your first transaction</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="glass-card mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title mb-0">Accounts</h2>
+        <a href="{{ url_for('accounts.index') }}" class="stat-meta">Manage</a>
+      </div>
+      {% for account in summary.accounts %}
+        <a href="{{ url_for('transactions.list_transactions', account=account.id) }}" class="account-row account-link-row">
+          <div>
+            <div class="account-name">{{ account.name }}</div>
+            <div class="account-type">{{ account.account_type }} · {{ account.owner }}</div>
+          </div>
+          <div class="amount-cell privacy-blur" data-privacy>{{ account.current_balance | inr }}</div>
+        </a>
+      {% else %}
+        <div class="empty-state py-3">
+          <p class="mb-0">Accounts will appear after seeding.</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="glass-card mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="section-title mb-0">Joint Envelopes</h2>
+        <a href="{{ url_for('envelopes.index') }}" class="stat-meta">View all</a>
+      </div>
+      <div class="stat-meta mb-3">
+        Purpose labels on Joint cash · {{ summary.envelopes.total | inr }}
+        {% if summary.envelopes.is_balanced %}
+          · matched
+        {% elif summary.envelopes.difference > 0 %}
+          · {{ summary.envelopes.difference | inr }} unlabelled
+        {% else %}
+          · over-allocated
+        {% endif %}
+      </div>
+      {% for row in summary.envelopes.rows %}
+        {% if row.balance > 0 or row.envelope.slug != 'unallocated' %}
+          <div class="account-row">
+            <span class="category-pill">
+              <span class="category-dot" style="background: {{ row.envelope.color }}"></span>
+              {{ row.envelope.name }}
+            </span>
+            <span class="amount-cell">{{ row.balance | inr }}</span>
+          </div>
+        {% endif %}
+      {% else %}
+        <div class="stat-meta">Allocate via transfer split</div>
+      {% endfor %}
+    </div>
+
+    {% if summary.investment_purpose %}
+    <div class="glass-card">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="section-title mb-0">Investment Purpose</h2>
+        <a href="{{ url_for('envelopes.index') }}" class="stat-meta">View all</a>
+      </div>
+      {% for row in summary.investment_purpose[:4] %}
+        {% if row.goal_id %}
+          <a href="{{ url_for('goals.detail', goal_id=row.goal_id) }}" class="account-row account-row-link">
+            <span class="category-pill">
+              <span class="category-dot" style="background: {{ row.color }}"></span>
+              {{ row.name }}
+            </span>
+            <span class="amount-cell">{{ row.current | inr }}</span>
+          </a>
+        {% else %}
+          <div class="account-row">
+            <span class="category-pill">
+              <span class="category-dot" style="background: {{ row.color }}"></span>
+              {{ row.name }}
+            </span>
+            <span class="amount-cell">{{ row.current | inr }}</span>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# —— Financial Health (last) —— #}
+{% set health = summary.health %}
+{% set score = health.score %}
+<div class="glass-card">
+  <div class="health-gauge mb-3">
+    {% set circumference = 226.08 %}
+    {% set offset = circumference - (circumference * score / 100) %}
+    <div class="gauge-ring">
+      <svg width="88" height="88" viewBox="0 0 88 88">
+        <circle class="track" cx="44" cy="44" r="36"></circle>
+        <circle class="progress {% if score >= 70 %}progress-ok{% elif score >= 45 %}progress-watch{% else %}progress-risk{% endif %}"
+                cx="44" cy="44" r="36"
+                stroke-dasharray="{{ circumference }}"
+                stroke-dashoffset="{{ offset }}"></circle>
+      </svg>
+      <div class="gauge-score">{{ score }}</div>
+    </div>
+    <div>
+      <div class="gauge-label">Financial Health</div>
+      <div class="gauge-title">{{ health.label }}</div>
+      <div class="stat-meta">Simple check for {{ health.month_label }} — how your money habits look overall</div>
+    </div>
+  </div>
+
+  <div class="health-factors">
+    {% for f in health.factors %}
+      <div class="health-factor">
+        <div class="d-flex justify-content-between align-items-baseline gap-2">
+          <span class="health-factor-label">{{ f.label }}</span>
+          <span class="health-factor-score status-{{ f.status }}">{{ f.score | int }}</span>
+        </div>
+        <div class="progress health-factor-bar">
+          <div class="progress-bar progress-{{ f.status }}" style="width: {{ f.score }}%"></div>
+        </div>
+        <div class="stat-meta">{{ f.detail }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

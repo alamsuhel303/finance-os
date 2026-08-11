@@ -1,0 +1,166 @@
+{% extends "layout.html" %}
+
+{% block content %}
+{% set g = detail.goal %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ g.name }}</h1>
+    <p class="page-subtitle">
+      {{ g.goal_type | replace('_', ' ') | capitalize }} · how this purpose accumulates
+    </p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('goals.edit', goal_id=g.id) }}" class="btn btn-ghost">
+      <i class="bi bi-pencil me-1"></i> Edit
+    </a>
+    <a href="{{ url_for('goals.index') }}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left me-1"></i> Goals
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Investment current</div>
+      <div class="stat-value stat-accent">{{ detail.current | inr }}</div>
+      <div class="stat-meta">{{ detail.holding_count }} holding{{ 's' if detail.holding_count != 1 else '' }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Invested (cost)</div>
+      <div class="stat-value">{{ detail.invested | inr }}</div>
+      <div class="stat-meta {% if detail.gain >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+        Gain {{ detail.gain | inr }}
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Posted contributions</div>
+      <div class="stat-value">{{ detail.contribution_total | inr }}</div>
+      <div class="stat-meta">From linked investment txns</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Target</div>
+      <div class="stat-value">{{ detail.target | inr }}</div>
+      <div class="stat-meta">{{ detail.progress }}% · {{ detail.remaining | inr }} left</div>
+    </div>
+  </div>
+</div>
+
+{% if detail.prior_basis > 0 %}
+  <div class="glass-card mb-4">
+    <div class="stat-meta mb-0">
+      <i class="bi bi-info-circle me-1"></i>
+      Cost basis includes {{ detail.prior_basis | inr }} not yet tied to posted investment transactions
+      (opening balance or holdings edited before SIP posting).
+    </div>
+  </div>
+{% endif %}
+
+<div class="glass-card mb-4">
+  <h2 class="section-title">Holdings tagged here</h2>
+  {% if detail.holdings %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>SIP</th>
+            <th class="text-end">Invested</th>
+            <th class="text-end">Current</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inv in detail.holdings %}
+            <tr>
+              <td class="desc-cell">{{ inv.name }}</td>
+              <td class="text-capitalize">{{ inv.asset_type | replace('_', ' ') }}</td>
+              <td>{% if inv.monthly_sip %}{{ inv.monthly_sip | inr }}{% else %}—{% endif %}</td>
+              <td class="text-end amount-cell">{{ inv.invested_amount | inr }}</td>
+              <td class="text-end amount-cell">{{ inv.current_value | inr }}</td>
+              <td class="text-end">
+                <a href="{{ url_for('investments.edit', inv_id=inv.id) }}" class="btn-icon" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state py-3">
+      <div>No holdings tagged to this goal yet</div>
+      <a href="{{ url_for('investments.index') }}" class="btn btn-ghost mt-2">Go to Investments</a>
+    </div>
+  {% endif %}
+</div>
+
+<div class="glass-card">
+  <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-2">
+    <h2 class="section-title mb-0">Contribution history</h2>
+    <div class="stat-meta">{{ detail.ledger_count }} entr{{ 'ies' if detail.ledger_count != 1 else 'y' }}</div>
+  </div>
+  {% if detail.ledger %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Source</th>
+            <th>Holding</th>
+            <th>Type</th>
+            <th class="text-end">Amount</th>
+            <th class="text-end">After</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.ledger %}
+            <tr>
+              <td>{{ row.date.strftime('%d %b %Y') }}</td>
+              <td class="desc-cell">{{ row.description }}</td>
+              <td>{{ row.account_name }}</td>
+              <td>{{ row.holding_name }}</td>
+              <td>
+                {% if row.kind == 'investment' %}
+                  <span class="badge-type badge-investment">Investment</span>
+                {% else %}
+                  <span class="badge-type badge-transfer">Cash</span>
+                {% endif %}
+              </td>
+              <td class="text-end amount-cell {% if row.is_inflow %}stat-positive{% else %}stat-negative{% endif %}">
+                {% if row.is_inflow %}+{% else %}−{% endif %}{{ row.amount | inr }}
+              </td>
+              <td class="text-end amount-cell running-balance">
+                {{ row.running_after | inr }}
+                <span class="stat-meta d-block">{{ row.running_label }}</span>
+              </td>
+              <td class="text-nowrap">
+                <a href="{{ url_for('transactions.edit', txn_id=row.txn.id) }}" class="btn-icon" title="Open transaction">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state py-3">
+      <div>No contribution transactions yet</div>
+      <div class="stat-meta mt-1">
+        Post SIPs from Investments, or record investment transactions linked to tagged holdings.
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

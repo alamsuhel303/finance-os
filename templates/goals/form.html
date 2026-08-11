@@ -1,0 +1,123 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'Edit' if goal else 'Add' }} Goal</h1>
+    <p class="page-subtitle">Target, current progress, and monthly contribution</p>
+  </div>
+  <a href="{{ url_for('goals.index') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card">
+  <form method="post" novalidate>
+    <div class="row g-3">
+      <div class="col-md-8">
+        <label class="form-label" for="name">Name</label>
+        <input type="text" class="form-control" id="name" name="name"
+               value="{{ form_data.get('name', '') }}"
+               placeholder="e.g. Emergency Fund" required maxlength="120">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="goal_type">Type</label>
+        <select class="form-select" id="goal_type" name="goal_type">
+          {% for t in goal_types %}
+            <option value="{{ t }}" {% if form_data.get('goal_type') == t %}selected{% endif %}>
+              {{ t | replace('_', ' ') | capitalize }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="target_amount">Target ({{ currency }})</label>
+        <input type="number" step="0.01" min="0" class="form-control" id="target_amount" name="target_amount"
+               value="{{ form_data.get('target_amount', '') }}" placeholder="0.00" required
+               data-amount-words="targetAmountWords">
+        <div class="form-text amount-words" id="targetAmountWords"></div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="current_amount">Current ({{ currency }})</label>
+        <input type="number" step="0.01" min="0" class="form-control" id="current_amount" name="current_amount"
+               value="{{ form_data.get('current_amount', '') }}" placeholder="0.00"
+               data-amount-words="currentAmountWords">
+        <div class="form-text amount-words" id="currentAmountWords"></div>
+        <div class="form-text">Ignored when a linked account is set</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="monthly_contribution">Monthly Contribution</label>
+        <input type="number" step="0.01" min="0" class="form-control" id="monthly_contribution" name="monthly_contribution"
+               value="{{ form_data.get('monthly_contribution', '') }}" placeholder="0.00"
+               data-amount-words="monthlyContribWords">
+        <div class="form-text amount-words" id="monthlyContribWords"></div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="target_date">Target Date</label>
+        <input type="date" class="form-control" id="target_date" name="target_date"
+               value="{{ form_data.get('target_date', '') }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="linked_account_id">Linked Account</label>
+        <select class="form-select" id="linked_account_id" name="linked_account_id">
+          <option value="">None (manual current)</option>
+          {% for acc in accounts %}
+            <option value="{{ acc.id }}" {% if form_data.get('linked_account_id')|string == acc.id|string %}selected{% endif %}>
+              {{ acc.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">
+          Progress = linked account cash (if any) + investments tagged with this goal.
+          Emergency goals use tagged cash/investments instead (see Accounts).
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="owner">Owner</label>
+        <select class="form-select" id="owner" name="owner">
+          {% for o in owners %}
+            <option value="{{ o }}" {% if form_data.get('owner', 'joint') == o %}selected{% endif %}>{{ o | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label" for="icon">Icon (Bootstrap Icons class)</label>
+        <input type="text" class="form-control" id="icon" name="icon"
+               value="{{ form_data.get('icon', 'bi-flag') }}" placeholder="bi-flag">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="color">Color</label>
+        <input type="color" class="form-control form-control-color" id="color" name="color"
+               value="{{ form_data.get('color', '#5eead4') }}">
+      </div>
+
+      <div class="col-12">
+        <label class="form-label" for="notes">Notes</label>
+        <textarea class="form-control" id="notes" name="notes" rows="2">{{ form_data.get('notes', '') }}</textarea>
+      </div>
+
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
+                 {% if form_data.get('is_active', '1') in ['1', 'true', 'on'] %}checked{% endif %}>
+          <label class="form-check-label" for="is_active">Active</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 mt-4">
+      <button type="submit" class="btn btn-accent">
+        <i class="bi bi-check-lg me-1"></i> Save
+      </button>
+      <a href="{{ url_for('goals.index') }}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/amount-words.js') }}?v=2"></script>
+{% endblock %}

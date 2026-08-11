@@ -1,0 +1,133 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">
+      <span class="category-pill">
+        <span class="category-dot" style="background: {{ envelope.color }}"></span>
+        {{ envelope.name }}
+      </span>
+    </h1>
+    <p class="page-subtitle">
+      {{ ledger.month_label }} · Allocations in, spends out · Balance {{ envelope.current_balance | inr }}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('envelopes.detail', envelope_id=envelope.id, year=prev_year, month=prev_month) }}" class="btn btn-ghost btn-sm">← Prev</a>
+    <a href="{{ url_for('envelopes.detail', envelope_id=envelope.id, year=next_year, month=next_month) }}" class="btn btn-ghost btn-sm">Next →</a>
+    <a href="{{ url_for('envelopes.index') }}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left me-1"></i> All envelopes
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Allocated</div>
+      <div class="stat-value">{{ ledger.totals.allocated | inr }}</div>
+      <div class="stat-meta">{{ ledger.month_label }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Spent</div>
+      <div class="stat-value stat-warning">{{ ledger.totals.spent | inr }}</div>
+      <div class="stat-meta">{{ ledger.month_label }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Net this month</div>
+      <div class="stat-value {% if ledger.totals.net >= 0 %}stat-positive{% else %}stat-negative{% endif %}">
+        {{ ledger.totals.net | inr }}
+      </div>
+      <div class="stat-meta">Allocated − spent</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Balance now</div>
+      <div class="stat-value">{{ envelope.current_balance | inr }}</div>
+      <div class="stat-meta">
+        {% if meta and meta.carry_forward %}
+          Carry {{ meta.carry_forward | inr }} into month
+        {% else %}
+          Lifetime pot left
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card">
+  <h2 class="section-title">Activity</h2>
+  {% if rows %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th class="text-end">Amount</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="text-nowrap">{{ row.date.isoformat() }}</td>
+              <td>
+                {% if row.entry_type == 'spend' %}
+                  <span class="badge-type badge-expense">Spend</span>
+                {% elif row.entry_type == 'allocation' %}
+                  <span class="badge-type badge-income">Allocation</span>
+                {% elif row.entry_type == 'reallocation_in' %}
+                  <span class="badge-type badge-income">Moved in</span>
+                {% elif row.entry_type == 'reallocation_out' %}
+                  <span class="badge-type badge-expense">Moved out</span>
+                {% else %}
+                  <span class="badge-type">{{ row.entry_type }}</span>
+                {% endif %}
+              </td>
+              <td class="desc-cell">
+                {{ row.description }}
+                {% if row.transaction and row.transaction.transaction_type == 'transfer' %}
+                  <div class="stat-meta">
+                    Transfer
+                    {% if row.transaction.account %}{{ row.transaction.account.name }}{% endif %}
+                    {% if row.transaction.to_account %} → {{ row.transaction.to_account.name }}{% endif %}
+                  </div>
+                {% elif row.transaction and row.transaction.account %}
+                  <div class="stat-meta">{{ row.transaction.account.name }}</div>
+                {% endif %}
+              </td>
+              <td class="text-end amount-cell {% if row.signed < 0 %}stat-negative{% else %}stat-positive{% endif %}">
+                {% if row.signed > 0 %}+{% endif %}{{ row.signed | inr }}
+              </td>
+              <td class="text-nowrap">
+                {% if row.transaction %}
+                  <a href="{{ url_for('transactions.edit', txn_id=row.transaction.id) }}" class="btn-icon" title="Open transaction">
+                    <i class="bi bi-pencil"></i>
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if ledger.truncated %}
+      <div class="stat-meta mt-2">Showing first 200 rows for this month.</div>
+    {% endif %}
+  {% else %}
+    <div class="empty-state py-4">
+      <i class="bi bi-inbox"></i>
+      <div>No activity in {{ ledger.month_label }} for this envelope.</div>
+      <a href="{{ url_for('transactions.create', type='transfer') }}" class="btn btn-accent btn-sm mt-2">Allocate via transfer</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

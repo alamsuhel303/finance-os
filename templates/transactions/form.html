@@ -1,0 +1,251 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'Edit' if transaction else 'Add' }} Transaction</h1>
+    <p class="page-subtitle">Accounts move cash · envelopes track purpose · categories track spend</p>
+  </div>
+  <a href="{{ url_for('transactions.list_transactions', **(list_filters or {})) }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card" style="max-width:820px">
+  <form method="post" novalidate id="txnForm">
+    {% for key, value in (list_filters or {}).items() %}
+      <input type="hidden" name="filter_{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label" for="date">Date</label>
+        <input type="date" class="form-control" id="date" name="date"
+               value="{{ form_data.get('date', '') }}" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="amount">Amount ({{ currency }})</label>
+        <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount"
+               value="{{ form_data.get('amount', '') }}" placeholder="0.00" required
+               data-amount-words="amountWords">
+        <div class="form-text amount-words" id="amountWords"></div>
+        <div class="form-text" id="balanceHint"></div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="transaction_type">Type</label>
+        <select class="form-select" id="transaction_type" name="transaction_type" required>
+          {% for t in transaction_types %}
+            <option value="{{ t }}" {% if form_data.get('transaction_type', 'expense') == t %}selected{% endif %}>
+              {{ t | capitalize }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label" for="description">Description</label>
+        <input type="text" class="form-control" id="description" name="description"
+               value="{{ form_data.get('description', '') }}"
+               placeholder="e.g. August salary / BigBasket groceries" required maxlength="255">
+      </div>
+
+      {% set show_category = form_data.get('transaction_type', 'expense') in ['expense', 'refund', 'income'] %}
+      {% set show_need_want = form_data.get('transaction_type', 'expense') in ['expense', 'refund'] %}
+      <div class="col-md-6 category-fields {% if not show_category %}hidden{% endif %}" id="categoryFields">
+        <label class="form-label" for="category_id">Category</label>
+        <select class="form-select" id="category_id" name="category_id" {% if not show_category %}disabled{% endif %}>
+          <option value="">Select category</option>
+          {% for cat in categories %}
+            <option value="{{ cat.id }}"
+                    data-type="{{ cat.category_type }}"
+                    data-envelope="{{ cat.envelope_id or '' }}"
+                    {% if form_data.get('category_id')|string == cat.id|string %}selected{% endif %}>
+              {{ cat.name }}{% if cat.envelope %} · {{ cat.envelope.name }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label" for="account_id" id="accountLabel">Account</label>
+        <select class="form-select" id="account_id" name="account_id" required>
+          <option value="">Select account</option>
+          {% for acc in accounts %}
+            <option value="{{ acc.id }}"
+                    data-owner="{{ acc.owner }}"
+                    data-balance="{{ acc.current_balance }}"
+                    data-name="{{ acc.name }}"
+                    {% if form_data.get('account_id')|string == acc.id|string %}selected{% endif %}>
+              {{ acc.name }} ({{ acc.current_balance }})
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text investment-fields {% if form_data.get('transaction_type') != 'investment' %}hidden{% endif %}" id="investmentAccountHint">
+          Cash account to debit (SIP / one-time investment outflow)
+        </div>
+      </div>
+
+      <div class="col-md-6 transfer-fields {% if form_data.get('transaction_type') != 'transfer' %}hidden{% endif %}" id="transferFields">
+        <label class="form-label" for="to_account_id">To Account</label>
+        <select class="form-select" id="to_account_id" name="to_account_id">
+          <option value="">Select destination</option>
+          {% for acc in accounts %}
+            <option value="{{ acc.id }}" {% if form_data.get('to_account_id')|string == acc.id|string %}selected{% endif %}>
+              {{ acc.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-6 investment-fields {% if form_data.get('transaction_type') != 'investment' %}hidden{% endif %}" id="investmentFields">
+        <label class="form-label" for="investment_id">Holding (optional)</label>
+        <select class="form-select" id="investment_id" name="investment_id">
+          <option value="">— None (cash outflow only) —</option>
+          {% for inv in investments %}
+            <option value="{{ inv.id }}" {% if form_data.get('investment_id')|string == inv.id|string %}selected{% endif %}>
+              {{ inv.name }}{% if inv.monthly_sip %} · SIP {{ inv.monthly_sip }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">
+          Link a holding to bump its invested/current (and units if scheme is set).
+          Prefer <strong>Post this month</strong> on Investments for SIPs.
+        </div>
+      </div>
+
+      <div class="col-md-6 expense-fields {% if form_data.get('transaction_type', 'expense') != 'expense' %}hidden{% endif %}" id="expenseFields">
+        <label class="form-label" for="envelope_id">Envelope (optional)</label>
+        <select class="form-select" id="envelope_id" name="envelope_id">
+          <option value="">Auto from category</option>
+          {% for env in envelopes %}
+            <option value="{{ env.id }}" {% if form_data.get('envelope_id')|string == env.id|string %}selected{% endif %}>
+              {{ env.name }} ({{ env.current_balance }})
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Changing category resets this to the category’s default pot.</div>
+        <div class="envelope-mismatch-hint" id="envelopeMismatchHint" role="status"></div>
+      </div>
+
+      <div class="col-12 transfer-fields {% if form_data.get('transaction_type') != 'transfer' %}hidden{% endif %}" id="splitSection">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <label class="form-label mb-0">Envelope split</label>
+            <div class="form-text">
+              Tags purpose in Joint. If left empty on Self/Wife → Joint, defaults to
+              <strong>Essentials</strong>. Custom splits must sum to the transfer amount.
+            </div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" id="addSplitRow">
+            <i class="bi bi-plus-lg"></i> Add row
+          </button>
+        </div>
+        <div id="splitRows">
+          {% if split_rows %}
+            {% for row in split_rows %}
+              <div class="row g-2 mb-2 split-row">
+                <div class="col-md-6">
+                  <select class="form-select" name="split_envelope_id">
+                    <option value="">Envelope</option>
+                    {% for env in envelopes %}
+                      <option value="{{ env.id }}" {% if row.envelope_id|string == env.id|string %}selected{% endif %}>{{ env.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-5">
+                  <input type="number" step="0.01" min="0" class="form-control" name="split_amount"
+                         value="{{ row.amount }}" placeholder="Amount">
+                </div>
+                <div class="col-md-1">
+                  <button type="button" class="btn-icon remove-split" title="Remove"><i class="bi bi-x-lg"></i></button>
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+        <div class="stat-meta" id="splitSummary"></div>
+      </div>
+
+      {# Paid by — only when spending from a joint-owned account #}
+      <div class="col-md-4 paid-by-fields hidden" id="paidByFields">
+        <label class="form-label" for="paid_by">Paid By</label>
+        <select class="form-select" id="paid_by" name="paid_by">
+          {% for p in paid_by_choices %}
+            <option value="{{ p }}" {% if form_data.get('paid_by', 'self') == p %}selected{% endif %}>
+              {{ p | capitalize }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Who’s expense when paying from Joint</div>
+      </div>
+
+      <div class="col-md-4 payment-mode-fields {% if form_data.get('transaction_type') == 'income' %}hidden{% endif %}" id="paymentModeFields">
+        <label class="form-label" for="payment_mode">Payment Mode</label>
+        <select class="form-select" id="payment_mode" name="payment_mode">
+          {% for mode in payment_modes %}
+            <option value="{{ mode }}" {% if form_data.get('payment_mode', 'upi') == mode %}selected{% endif %}>
+              {{ mode | replace('_', ' ') | title }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4 need-want-fields {% if not show_need_want %}hidden{% endif %}" id="needWantFields">
+        <label class="form-label" for="need_want">Need / Want</label>
+        <select class="form-select" id="need_want" name="need_want">
+          {% for nw in need_want_choices %}
+            <option value="{{ nw }}" {% if form_data.get('need_want', 'need') == nw %}selected{% endif %}>
+              {{ nw | upper if nw == 'n/a' else nw | capitalize }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label" for="notes">Notes</label>
+        <textarea class="form-control" id="notes" name="notes" rows="3"
+                  placeholder="Optional notes…">{{ form_data.get('notes', '') }}</textarea>
+      </div>
+
+      <div class="col-12 d-flex gap-2 pt-2">
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-check-lg me-1"></i>
+          {{ 'Save Changes' if transaction else 'Add Transaction' }}
+        </button>
+        <a href="{{ url_for('transactions.list_transactions', **(list_filters or {})) }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<template id="splitRowTemplate">
+  <div class="row g-2 mb-2 split-row">
+    <div class="col-md-6">
+      <select class="form-select" name="split_envelope_id">
+        <option value="">Envelope</option>
+        {% for env in envelopes %}
+          <option value="{{ env.id }}">{{ env.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-5">
+      <input type="number" step="0.01" min="0" class="form-control" name="split_amount" placeholder="Amount">
+    </div>
+    <div class="col-md-1">
+      <button type="button" class="btn-icon remove-split" title="Remove"><i class="bi bi-x-lg"></i></button>
+    </div>
+  </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.TXN_DEFAULTS = {
+    jointId: {{ default_joint_id | tojson }},
+    fromId: {{ default_from_id | tojson }},
+    essentialsId: {{ default_essentials_id | tojson }},
+    isEdit: {{ 'true' if transaction else 'false' }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/amount-words.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/transactions.js') }}?v=9"></script>
+{% endblock %}

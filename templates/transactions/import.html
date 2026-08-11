@@ -1,0 +1,200 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Import Transactions</h1>
+    <p class="page-subtitle">Preview first — then confirm. Duplicates (same date, amount, description) are skipped.</p>
+  </div>
+  <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <h2 class="section-title">1. Download template</h2>
+      <p class="page-subtitle mb-3">
+        Live categories (including Dining Out, Movies, Auto / Cab…).
+        Green columns auto-fill: <strong>Joint Account</strong>, type=expense, UPI,
+        envelope from category. You mainly fill date, amount, description, category.
+      </p>
+      <a href="{{ url_for('transactions.import_template') }}" class="btn btn-accent">
+        <i class="bi bi-download me-1"></i> Download Excel template
+      </a>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <h2 class="section-title">2. Upload for preview</h2>
+      <p class="page-subtitle mb-3">
+        Required: <code>date</code>, <code>amount</code>, <code>description</code>,
+        <code>type</code>, <code>account</code>.
+      </p>
+      <form method="post" action="{{ url_for('transactions.import_upload') }}" enctype="multipart/form-data">
+        <input type="hidden" name="action" value="preview">
+        <input type="file" name="file" class="form-control mb-3" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="skip_duplicates" name="skip_duplicates" value="1" checked>
+          <label class="form-check-label" for="skip_duplicates">Skip duplicates (recommended)</label>
+        </div>
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-eye me-1"></i> Preview import
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if preview %}
+  <div class="glass-card mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="section-title mb-0">3. Preview</h2>
+        <p class="page-subtitle mb-0 mt-1">
+          {{ preview.ready_count }} ready · {{ preview.duplicate_count }} duplicate ·
+          {{ preview.skipped_count }} skipped/error
+          {% if preview.conflict_count %}
+            · <strong style="color: var(--warning)">{{ preview.conflict_count }} envelope conflict{{ 's' if preview.conflict_count != 1 else '' }}</strong>
+          {% endif %}
+          — nothing saved yet
+        </p>
+      </div>
+      <form method="post" action="{{ url_for('transactions.import_upload') }}" class="d-flex gap-2 flex-wrap">
+        <input type="hidden" name="action" value="confirm">
+        <input type="hidden" name="staging_token" value="{{ preview.staging_token }}">
+        <input type="hidden" name="skip_duplicates" value="1">
+        <button type="submit" class="btn btn-accent" {% if not preview.ready_count %}disabled{% endif %}>
+          <i class="bi bi-check-lg me-1"></i> Confirm import ({{ preview.ready_count }})
+        </button>
+        <a href="{{ url_for('transactions.import_page') }}" class="btn btn-ghost">Cancel</a>
+      </form>
+    </div>
+    {% if preview.conflict_count %}
+      <div class="alert alert-warning mb-3" role="status">
+        <strong>{{ preview.conflict_count }}</strong> ready row{{ 's' if preview.conflict_count != 1 else '' }}
+        have a category whose default pot differs from the envelope that will be used
+        (sheet override or wrong auto value). Fix the Excel <code>envelope</code> column
+        or clear it to use the category default — or confirm if the override is intentional
+        (same as the Haircut → Lifestyle mismatch).
+      </div>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Row</th>
+            <th>Status</th>
+            <th>Summary</th>
+            <th>Category</th>
+            <th>Envelope</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview.preview_rows %}
+            <tr {% if row.envelope_conflict %}style="background: color-mix(in srgb, var(--warning) 8%, transparent)"{% endif %}>
+              <td>{{ row.row }}</td>
+              <td>
+                {% if row.status == 'ready' %}
+                  <span class="badge-type badge-income">Ready</span>
+                {% elif row.status == 'duplicate' %}
+                  <span class="badge-type badge-transfer">Duplicate</span>
+                {% elif row.status == 'skipped' %}
+                  <span class="badge-type">Skipped</span>
+                {% else %}
+                  <span class="badge-type" style="color:var(--danger)">Error</span>
+                {% endif %}
+                {% if row.envelope_conflict %}
+                  <div class="stat-meta mt-1" style="color: var(--warning)">Conflict</div>
+                {% endif %}
+              </td>
+              <td class="desc-cell">{{ row.summary }}</td>
+              <td class="stat-meta">{{ row.category_name or '—' }}</td>
+              <td>
+                {% if row.envelope_conflict %}
+                  <span style="color: var(--warning); font-weight: 600">{{ row.envelope }}</span>
+                  <div class="stat-meta">
+                    sheet/override · default {{ row.default_envelope }}
+                  </div>
+                {% else %}
+                  {{ row.envelope or '—' }}
+                  {% if row.envelope_source in ('sheet', 'category') %}
+                    <div class="stat-meta">from {{ row.envelope_source }}</div>
+                  {% elif row.envelope_source == 'n/a' %}
+                    <div class="stat-meta">no pot (not Joint)</div>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td class="page-subtitle mb-0">{{ row.detail }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if preview.preview_truncated %}
+      <div class="stat-meta mt-2">…and {{ preview.preview_truncated }} more rows not shown</div>
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="glass-card mb-4">
+  <h2 class="section-title">Column guide</h2>
+  <div class="table-wrap">
+    <table class="fos-table">
+      <thead>
+        <tr>
+          <th>Column</th>
+          <th>Required</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>date</code></td><td>Yes</td><td>YYYY-MM-DD or Excel date</td></tr>
+        <tr><td><code>amount</code></td><td>Yes</td><td>Positive number</td></tr>
+        <tr><td><code>description</code></td><td>Yes</td><td>What the transaction is</td></tr>
+        <tr><td><code>type</code></td><td>Yes</td><td>Dropdown: expense / income / transfer / investment / refund</td></tr>
+        <tr><td><code>account</code></td><td>Yes</td><td>Dropdown of your accounts</td></tr>
+        <tr><td><code>to_account</code></td><td>Transfers</td><td>Dropdown — destination account</td></tr>
+        <tr><td><code>category</code></td><td>No</td><td>Dropdown of your categories</td></tr>
+        <tr><td><code>envelope</code></td><td>No</td><td>Dropdown — blank uses category default. Preview shows resolved pot + conflicts.</td></tr>
+        <tr><td><code>paid_by</code> / <code>payment_mode</code> / <code>need_want</code></td><td>No</td><td>Dropdowns</td></tr>
+        <tr><td><code>notes</code></td><td>No</td><td>Free text</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if result %}
+  <div class="glass-card">
+    <h2 class="section-title">Import result</h2>
+    <p class="page-subtitle mb-3">
+      Created {{ result.created_count }} · Skipped {{ result.skipped_count }}
+      {% if result.duplicate_count %} · Duplicates {{ result.duplicate_count }}{% endif %}
+    </p>
+    {% if result.created_preview %}
+      <div class="stat-meta mb-2">Sample created</div>
+      <ul class="page-subtitle">
+        {% for line in result.created_preview %}
+          <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% if result.errors %}
+      <div class="stat-meta mb-2 mt-3">Notes / errors</div>
+      <ul class="page-subtitle" style="color: var(--danger)">
+        {% for err in result.errors[:40] %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+      {% if result.errors|length > 40 %}
+        <div class="stat-meta">…and {{ result.errors|length - 40 }} more</div>
+      {% endif %}
+    {% endif %}
+    <div class="mt-3">
+      <a href="{{ url_for('transactions.list_transactions') }}" class="btn btn-accent">View transactions</a>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
