@@ -1,6 +1,7 @@
 """Model package exports."""
 
 from models.account import Account
+from models.app_profile import AppProfile
 from models.budget import Budget
 from models.category import Category
 from models.envelope import Envelope, EnvelopeEntry
@@ -15,6 +16,7 @@ from models.transaction import Transaction
 
 __all__ = [
     "Account",
+    "AppProfile",
     "Budget",
     "Category",
     "Envelope",

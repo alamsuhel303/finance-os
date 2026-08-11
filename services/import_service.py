@@ -48,11 +48,10 @@ TEMPLATE_PREFILL_ROWS = 40
 
 
 def _joint_account() -> Account | None:
-    return (
-        Account.query.filter_by(name="Joint Account", is_active=True).first()
-        or Account.query.filter_by(owner="joint", account_type="joint", is_active=True).first()
-        or Account.query.filter_by(owner="joint", is_active=True).first()
-    )
+    """Default spend account for import rows — Joint (couple) or Expenses (solo)."""
+    from services import envelope_service
+
+    return envelope_service.resolve_envelope_cash_account()
 
 
 def build_template_xlsx() -> bytes:
@@ -230,7 +229,7 @@ def build_template_xlsx() -> bytes:
         "  • Dining Out / Movies & Entertainment → Lifestyle envelope (auto).",
         "  • Groceries / Rent / Utilities → Essentials (auto).",
         "  • Shopping / Furniture / Electronics → Shopping (auto).",
-        "  • Override account when spend is from Suhel / Seema instead of Joint.",
+        "  • Override account when spend is from a personal account instead of Joint.",
         "  • Leave envelope blank on upload — app still maps from category.",
         "  • Transfers: set type=transfer, account=From, to_account=To.",
         "",

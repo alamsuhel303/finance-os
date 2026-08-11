@@ -45,7 +45,7 @@
 <div class="glass-card mb-3" style="border-left: 3px solid var(--accent, #5eead4)">
   <h2 class="section-title">Emergency Fund = tags (no separate account)</h2>
   <p class="page-subtitle mb-2">
-    Money stays in Suhel / Seema / Joint / FDs. You only <strong>tag</strong> how much of it
+    Money stays in {{ personal_label }}{% if is_couple_mode %} / Joint{% endif %} / FDs. You only <strong>tag</strong> how much of it
     counts as emergency. No transfer. Health Score &amp; Goals use the total below.
   </p>
   <ul class="page-subtitle mb-0" style="padding-left: 1.25rem">

@@ -12,7 +12,7 @@
       {% if summary_mode == "monthly" %}
         Envelope activity
       {% else %}
-        Joint Account Envelopes
+        {% if envelopes.joint_account %}{{ envelopes.joint_account.name }}{% elif is_couple_mode %}Joint{% else %}Expenses{% endif %} Envelopes
       {% endif %}
       <span class="account-type fw-normal">· {{ envelopes.month_label }}</span>
     </h2>

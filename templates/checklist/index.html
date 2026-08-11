@@ -27,7 +27,7 @@
     {% endfor %}
   </ol>
   <p class="page-subtitle mb-0 mt-2">
-    Order: income → Fund Joint → SIPs → EPF → snapshot. EPF is separate (salary deduction, not a bank SIP).
+    Order: income → {% if is_couple_mode %}Fund Joint{% else %}Fund Expenses{% endif %} → SIPs → EPF → snapshot. EPF is separate (salary deduction, not a bank SIP).
   </p>
 </nav>
 

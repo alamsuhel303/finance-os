@@ -61,9 +61,13 @@
       <label class="form-label">Paid By</label>
       <select name="paid_by" class="form-select">
         <option value="">All</option>
-        {% for p in paid_by_choices %}
-          <option value="{{ p }}" {% if filters.paid_by == p %}selected{% endif %}>{{ p | capitalize }}</option>
-        {% endfor %}
+        <option value="self" {% if filters.paid_by == 'self' %}selected{% endif %}>{{ person1_name }}</option>
+        {% if is_couple_mode and person2_name %}
+        <option value="wife" {% if filters.paid_by == 'wife' %}selected{% endif %}>{{ person2_name }}</option>
+        {% endif %}
+        {% if is_couple_mode %}
+        <option value="joint" {% if filters.paid_by == 'joint' %}selected{% endif %}>Joint</option>
+        {% endif %}
       </select>
     </div>
     <div>
@@ -128,7 +132,12 @@
                 {{ txn.account.name if txn.account else '—' }}
               {% endif %}
             </td>
-            <td class="text-capitalize">{{ txn.paid_by }}</td>
+            <td>
+              {% if txn.paid_by == 'self' %}{{ person1_name }}
+              {% elif txn.paid_by == 'wife' %}{{ person2_name or 'Partner' }}
+              {% elif txn.paid_by == 'joint' %}Joint
+              {% else %}{{ txn.paid_by | capitalize }}{% endif %}
+            </td>
             <td class="text-capitalize">{{ txn.payment_mode | replace('_', ' ') }}</td>
             <td class="text-end amount-cell {% if txn.transaction_type in ['income', 'refund'] %}stat-positive{% elif txn.transaction_type in ['expense', 'investment'] %}stat-negative{% elif txn.transaction_type == 'transfer' and filter_account and txn.to_account_id == filter_account.id %}stat-positive{% elif txn.transaction_type == 'transfer' %}stat-negative{% endif %}">
               {% if filter_account and txn.transaction_type == 'transfer' %}

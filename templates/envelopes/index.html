@@ -5,7 +5,9 @@
   <div>
     <h1 class="page-title">Envelopes</h1>
     <p class="page-subtitle">
-      Labels on Joint Account cash — not separate bank accounts, and not Budget limits.
+      Labels on
+      {% if overview.joint_account %}{{ overview.joint_account.name }}{% elif is_couple_mode %}Joint{% else %}Expenses{% endif %}
+      cash — not separate bank accounts, and not Budget limits.
       Showing {{ overview.month_label }} activity · leftovers roll as carry forward.
     </p>
   </div>

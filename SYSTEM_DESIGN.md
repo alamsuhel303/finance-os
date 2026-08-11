@@ -95,8 +95,8 @@ Typical household:
 
 | Account | Owner | Role |
 |---------|-------|------|
-| My Account (Suhel) | self | Salary, personal spends, Fund Joint contribution |
-| Wife Account (Seema) | wife | Same for spouse |
+| Person 1 Account | self | Salary, personal spends, Fund Joint contribution |
+| Person 2 Account | wife | Same for partner |
 | Joint Account | joint | Shared household cash; **only** account whose cash is labeled by envelopes |
 | Home / Travel / Lifestyle Fund | joint | Goal-linked cash (separate from envelopes) |
 | Investment Account | joint | Optional cash staging for investments |
@@ -122,10 +122,10 @@ Typical household:
 | Question answered | “Are we over plan for Rent this month?” | “How much Joint cash is for Travel?” |
 | Scope | Household Essentials categories | Purpose pots on Joint |
 | Dining / movies | **Excluded** from Budget | Fund / spend from **Lifestyle** |
-| Parents | **Excluded** from Budget | Usually paid from Suhel/Seema (no pot) |
+| Parents | **Excluded** from Budget | Usually paid from personal accounts (no pot) |
 | Shopping / Travel | Not on Budget | Own pots |
 | Pay from Joint | Counts toward Budget if category is on plan | Debits mapped pot |
-| Pay from Suhel/Seema | Counts toward Budget if on plan | **No** envelope debit |
+| Pay from personal | Counts toward Budget if on plan | **No** envelope debit |
 
 **Category slug sets** (`utils/seed.py`):
 
@@ -147,10 +147,10 @@ Side effects:
 
 ### 3.4 Joint funding
 
-A **plan** (Settings → Joint funding): Suhel amount + Seema amount + day-of-month + named envelope split lines. Leftover contribution → Unallocated.
+A **plan** (Settings → Joint funding): Person 1 amount + Person 2 amount + day-of-month + named envelope split lines. Leftover contribution → Unallocated.
 
 **Post month** creates one transfer per person with description  
-`Joint funding · {Suhel|Seema} · {Mon YYYY}` (idempotent).  
+`Joint funding · {Person1|Person2} · {Mon YYYY}` (idempotent).  
 Editing the plan after post does **not** rewrite history — use **Move between pots** (`reallocate`).
 
 ### 3.5 Investments, goals, emergency, net worth
@@ -325,7 +325,7 @@ Seed highlights:
 
 Recommended order:
 
-1. **Post recurring income** → Suhel / Seema accounts up  
+1. **Post recurring income** → personal accounts up  
 2. **Fund Joint** → transfers with envelope allocations  
 3. **Post SIPs** → cash leaves source; holdings updated  
 4. **Post EPF** → non-cash investment txn (`skip_cash_impact`)  
@@ -359,7 +359,7 @@ post_month(year, month)
     prorate plan splits to their contribution (largest-remainder)
     create_transaction(type=transfer, description=idempotent key, splits=...)
          ↓
-    Suhel/Seema ↓ · Joint ↑ · envelope allocations ↑
+    Personal accounts ↓ · Joint ↑ · envelope allocations ↑
 ```
 
 ### 5.5 Envelope spend vs reallocate
@@ -630,9 +630,9 @@ No bank aggregators. Excel via openpyxl. Backup = local filesystem copy.
 | Joint | Yes (e.g. Groceries) | Debit Essentials (or mapped pot) | Counts |
 | Joint | Dining Out / Movies | Debit Lifestyle | Excluded |
 | Joint | Shopping / Travel | Debit Shopping / Travel | Not on Budget |
-| Suhel / Seema | Yes (e.g. Medical) | None | Counts |
-| Suhel / Seema | Parents | None | Excluded |
-| Suhel / Seema | Dining | None | Excluded |
+| Personal | Yes (e.g. Medical) | None | Counts |
+| Personal | Parents | None | Excluded |
+| Personal | Dining | None | Excluded |
 
 ---
 

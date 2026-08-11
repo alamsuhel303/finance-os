@@ -154,17 +154,21 @@
     <div class="glass-card h-100">
       <h2 class="section-title">Paid By</h2>
       <div class="account-row">
-        <div class="account-name">Self</div>
+        <div class="account-name">{{ person1_name }}</div>
         <div class="amount-cell">{{ summary.paid_by.self | inr }}</div>
       </div>
+      {% if is_couple_mode and person2_name %}
       <div class="account-row">
-        <div class="account-name">Wife</div>
+        <div class="account-name">{{ person2_name }}</div>
         <div class="amount-cell">{{ summary.paid_by.wife | inr }}</div>
       </div>
+      {% endif %}
+      {% if is_couple_mode %}
       <div class="account-row">
         <div class="account-name">Joint</div>
         <div class="amount-cell">{{ summary.paid_by.joint | inr }}</div>
       </div>
+      {% endif %}
     </div>
   </div>
   <div class="col-lg-4">
@@ -215,7 +219,12 @@
                   </span>
                 {% else %}—{% endif %}
               </td>
-              <td>{{ txn.paid_by | capitalize }}</td>
+              <td>
+                {% if txn.paid_by == 'self' %}{{ person1_name }}
+                {% elif txn.paid_by == 'wife' %}{{ person2_name or 'Partner' }}
+                {% elif txn.paid_by == 'joint' %}Joint
+                {% else %}{{ txn.paid_by | capitalize }}{% endif %}
+              </td>
               <td class="amount-cell stat-negative">{{ txn.amount | inr }}</td>
             </tr>
           {% endfor %}

@@ -162,7 +162,7 @@ def _prepare_envelope_side_effects(data: Any):
         if amount is None and splits:
             raise EnvelopeValidationError("Enter a valid transfer amount.")
 
-        # Self/Wife → Joint with no split: default 100% to Essentials
+        # Salary → spending pot with no split: default 100% to Essentials
         if not splits and amount is not None:
             from_acc = db.session.get(Account, _optional_int(data.get("account_id")))
             to_acc = db.session.get(Account, _optional_int(data.get("to_account_id")))
@@ -177,7 +177,7 @@ def _prepare_envelope_side_effects(data: Any):
             envelope_service.validate_splits_against_total(splits, amount)
     elif txn_type == "expense":
         from_acc = db.session.get(Account, _optional_int(data.get("account_id")))
-        # Envelopes label Joint cash only. Suhel/Seema spends hit Budget, not pots.
+        # Envelopes label Joint cash only. Personal account spends hit Budget, not pots.
         if envelope_service.is_joint_account(from_acc):
             expense_env = envelope_service.resolve_envelope_for_expense(
                 envelope_id=_optional_int(data.get("envelope_id")),

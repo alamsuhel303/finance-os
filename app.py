@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, redirect, request, url_for
 
 from config import config_by_name
 from extensions import db
@@ -28,6 +28,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _init_extensions(app)
     _register_blueprints(app)
     _register_template_helpers(app)
+    _register_setup_guard(app)
     _init_database(app)
 
     return app
@@ -64,6 +65,7 @@ def _register_blueprints(app: Flask) -> None:
         networth_bp,
         reports_bp,
         settings_bp,
+        setup_bp,
         transactions_bp,
     )
 
@@ -79,6 +81,25 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(goals_bp)
     app.register_blueprint(networth_bp)
     app.register_blueprint(insurance_bp)
+    app.register_blueprint(setup_bp)
+
+
+def _register_setup_guard(app: Flask) -> None:
+    """Redirect to /setup on first launch until profile is configured."""
+
+    @app.before_request
+    def _require_setup():
+        # Allow static files and the setup route itself
+        if request.endpoint and (
+            request.endpoint.startswith("static")
+            or request.endpoint.startswith("setup.")
+        ):
+            return None
+        from services import profile_service
+
+        if not profile_service.is_setup_complete():
+            return redirect(url_for("setup.index"))
+        return None
 
 
 def _register_template_helpers(app: Flask) -> None:
@@ -90,9 +111,23 @@ def _register_template_helpers(app: Flask) -> None:
 
     @app.context_processor
     def inject_globals():
+        from services import profile_service
+
+        profile = profile_service.get_profile()
+        p1 = profile.person1_name if profile else "Person 1"
+        p2 = profile.person2_name if profile and profile.is_couple else None
+        couple = profile.is_couple if profile else True
+        personal = profile.personal_label if profile else "Person 1 / Person 2"
+
+        owner_labels = profile_service.get_owner_labels()
         return {
             "app_name": "Finance OS",
             "currency_symbol": symbol,
+            "person1_name": p1,
+            "person2_name": p2,
+            "is_couple_mode": couple,
+            "personal_label": personal,
+            "owner_labels": owner_labels,
             "nav_items": [
                 {"id": "dashboard", "label": "Dashboard", "icon": "bi-grid-1x2", "endpoint": "dashboard.index", "ready": True},
                 {"id": "checklist", "label": "Month", "icon": "bi-calendar-check", "endpoint": "checklist.index", "ready": True},
@@ -130,3 +165,4 @@ app = create_app()
 if __name__ == "__main__":
     # Port 5000 conflicts with macOS AirPlay Receiver (browser 403).
     app.run(host="127.0.0.1", port=5001, debug=True)
+

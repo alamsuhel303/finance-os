@@ -3,11 +3,17 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Joint Funding Plan</h1>
+    <h1 class="page-title">{{ funding_ui.plan_title }}</h1>
     <p class="page-subtitle">
-      Who pays into
-      {% if joint_account %}<strong>{{ joint_account.name }}</strong>{% else %}Joint{% endif %},
-      then one shared envelope plan for that pool
+      {% if is_couple_mode %}
+        Who pays into
+        {% if joint_account %}<strong>{{ joint_account.name }}</strong>{% else %}Joint{% endif %},
+        then one shared envelope plan for that pool
+      {% else %}
+        Monthly transfer from salary into
+        {% if joint_account %}<strong>{{ joint_account.name }}</strong>{% else %}Expenses{% endif %},
+        then label that pool with envelopes
+      {% endif %}
     </p>
   </div>
   <a href="{{ url_for('settings.index') }}" class="btn btn-ghost">
@@ -19,14 +25,20 @@
   <form method="post" novalidate id="jointFundingForm">
     <div class="row g-3">
       <div class="col-12">
-        <h2 class="section-title mb-0">1. Who contributes</h2>
+        <h2 class="section-title mb-0">{% if is_couple_mode %}1. Who contributes{% else %}1. Monthly transfer{% endif %}</h2>
         <p class="page-subtitle mt-1 mb-0">
-          Example: Joint budget ₹1,00,000 · Suhel ₹30,000 · Seema ₹70,000
+          {% if is_couple_mode %}
+            Example: Joint budget ₹1,00,000 · {{ person1_name }} ₹30,000 · {{ person2_name }} ₹70,000
+          {% else %}
+            Example: move ₹50,000 from {{ person1_name }} Salary → Expenses each month
+          {% endif %}
         </p>
       </div>
 
       <div class="col-md-6">
-        <label class="form-label" for="self_account_id">Suhel account</label>
+        <label class="form-label" for="self_account_id">
+          {% if is_couple_mode %}{{ person1_name }} account{% else %}From (salary) account{% endif %}
+        </label>
         <select class="form-select" id="self_account_id" name="self_account_id">
           <option value="">Select account</option>
           {% for acc in accounts %}
@@ -37,15 +49,18 @@
         </select>
       </div>
       <div class="col-md-6">
-        <label class="form-label" for="self_amount">Suhel amount ({{ currency }})</label>
+        <label class="form-label" for="self_amount">
+          {% if is_couple_mode %}{{ person1_name }} amount ({{ currency }}){% else %}Transfer amount ({{ currency }}){% endif %}
+        </label>
         <input type="number" step="0.01" min="0" class="form-control contrib-amount" id="self_amount" name="self_amount"
-               value="{{ form_data.get('self_amount', '') }}" placeholder="30000"
+               value="{{ form_data.get('self_amount', '') }}" placeholder="{% if is_couple_mode %}30000{% else %}50000{% endif %}"
                data-amount-words="selfAmountWords">
         <div class="form-text amount-words" id="selfAmountWords"></div>
       </div>
 
+      {% if is_couple_mode %}
       <div class="col-md-6">
-        <label class="form-label" for="wife_account_id">Seema account</label>
+        <label class="form-label" for="wife_account_id">{{ person2_name }} account</label>
         <select class="form-select" id="wife_account_id" name="wife_account_id">
           <option value="">Select account</option>
           {% for acc in accounts %}
@@ -56,12 +71,15 @@
         </select>
       </div>
       <div class="col-md-6">
-        <label class="form-label" for="wife_amount">Seema amount ({{ currency }})</label>
+        <label class="form-label" for="wife_amount">{{ person2_name }} amount ({{ currency }})</label>
         <input type="number" step="0.01" min="0" class="form-control contrib-amount" id="wife_amount" name="wife_amount"
                value="{{ form_data.get('wife_amount', '') }}" placeholder="70000"
                data-amount-words="wifeAmountWords">
         <div class="form-text amount-words" id="wifeAmountWords"></div>
       </div>
+      {% else %}
+      <input type="hidden" name="wife_amount" value="0">
+      {% endif %}
 
       <div class="col-md-4">
         <label class="form-label" for="day_of_month">Transfer day</label>
@@ -71,8 +89,12 @@
       </div>
       <div class="col-md-8 d-flex align-items-end">
         <div class="stat-meta mb-2">
-          Joint total: <strong id="contribTotal">{{ currency }}0.00</strong>
-          <span class="ms-1">(Suhel + Seema)</span>
+          {{ funding_ui.short }} total: <strong id="contribTotal">{{ currency }}0.00</strong>
+          {% if is_couple_mode %}
+            <span class="ms-1">({{ person1_name }} + {{ person2_name }})</span>
+          {% else %}
+            <span class="ms-1">(salary → {% if joint_account %}{{ joint_account.name }}{% else %}Expenses{% endif %})</span>
+          {% endif %}
         </div>
       </div>
 
@@ -81,8 +103,7 @@
           <div>
             <h2 class="section-title mb-0">2. Envelope plan (shared)</h2>
             <p class="page-subtitle mt-1 mb-0">
-              How the Joint pool is labelled — not per person.
-              Leftover goes to <strong>Unallocated</strong> automatically.
+              How the {{ funding_ui.short }} pool is labelled — leftover goes to <strong>Unallocated</strong> automatically.
             </p>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" id="addSplitRow">
@@ -119,7 +140,7 @@
         <div class="account-row" style="border-style:dashed">
           <div>
             <div class="account-name">Unallocated (auto)</div>
-            <div class="account-type">Joint total minus the envelopes above</div>
+            <div class="account-type">{{ funding_ui.short }} total minus the envelopes above</div>
           </div>
           <div class="amount-cell" id="unallocatedAmount">{{ currency }}0.00</div>
         </div>
@@ -175,6 +196,8 @@
 <script>
 (function () {
   var currency = {{ currency | tojson }};
+  var poolLabel = {{ funding_ui.short | tojson }};
+  var isCouple = {{ is_couple_mode | tojson }};
   var rows = document.getElementById('splitRows');
   var tpl = document.getElementById('jointSplitRowTemplate');
   var addBtn = document.getElementById('addSplitRow');
@@ -189,7 +212,8 @@
   }
 
   function refresh() {
-    var contrib = num(document.getElementById('self_amount')) + num(document.getElementById('wife_amount'));
+    var wifeEl = document.getElementById('wife_amount');
+    var contrib = num(document.getElementById('self_amount')) + (wifeEl ? num(wifeEl) : 0);
     var split = 0;
     rows.querySelectorAll('.split-amount').forEach(function (inp) { split += num(inp); });
     var remainder = Math.round((contrib - split) * 100) / 100;
@@ -197,13 +221,15 @@
     document.getElementById('unallocatedAmount').textContent = money(Math.max(remainder, 0));
     var summary = document.getElementById('splitSummary');
     if (contrib === 0) {
-      summary.textContent = 'Enter Suhel + Seema amounts first, then assign envelopes.';
+      summary.textContent = isCouple
+        ? 'Enter {{ person1_name }} + {{ person2_name }} amounts first, then assign envelopes.'
+        : 'Enter the monthly transfer amount first, then assign envelopes.';
       summary.style.color = '';
     } else if (remainder < 0) {
-      summary.textContent = 'Envelope lines exceed Joint total by ' + money(-remainder) + '.';
+      summary.textContent = 'Envelope lines exceed ' + poolLabel + ' total by ' + money(-remainder) + '.';
       summary.style.color = 'var(--danger, #f87171)';
     } else if (remainder === 0) {
-      summary.textContent = 'Envelopes use the full Joint total — nothing left for Unallocated.';
+      summary.textContent = 'Envelopes use the full ' + poolLabel + ' total — nothing left for Unallocated.';
       summary.style.color = 'var(--success, #34d399)';
     } else {
       summary.textContent = money(split) + ' labelled · ' + money(remainder) + ' auto → Unallocated';

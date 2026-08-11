@@ -1,4 +1,4 @@
-"""Joint funding plan — monthly Suhel/Seema → Joint contributions + envelope split."""
+"""Joint funding plan — monthly Person1/Person2 → Joint contributions + envelope split."""
 
 from __future__ import annotations
 

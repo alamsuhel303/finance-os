@@ -14,7 +14,7 @@
       {% if category.envelope %}
         · If paid from Joint, pot =
         <a href="{{ url_for('envelopes.detail', envelope_id=category.envelope.id, year=activity.year, month=activity.month) }}">{{ category.envelope.name }}</a>
-        · Suhel/Seema pays = budget only
+        · {{ personal_label }} pays = budget only
       {% endif %}
     </p>
   </div>

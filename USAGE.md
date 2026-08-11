@@ -11,7 +11,7 @@ For a feature overview (what exists), see [README.md](README.md). This file is *
 
 | Concept | Meaning |
 |---------|---------|
-| **Account** | Real cash (Suhel, Seema, Joint, Cash…) |
+| **Account** | Real cash (Person 1, Person 2, Joint, Cash…) |
 | **Envelope** | Purpose label on Joint money (Essentials, Shopping, Travel, Lifestyle…) |
 | **Category** | What the spend/income was (Groceries, Salary…) |
 | **Budget** | Essentials household plan (~₹1.5L: Rent, groceries…). Not Dining/Parents |
@@ -25,7 +25,7 @@ Money moves with **transactions**. Envelopes do not move bank cash by themselves
 
 1. Start the app and open the Dashboard.
 2. **Accounts → Statement wizard** (or edit each account) — set balances to match your bank as of today.
-3. **Settings → Recurring Income** — add Suhel / Seema salary templates (amount, credit account, day).
+3. **Settings → Recurring Income** — add salary templates (amount, credit account, day).
 4. **Settings → Joint Funding** — set monthly contributions + shared envelope plan (see below).
 5. **Settings → Categories** — add any missing labels.
 6. **Settings → Create Backup**, then copy `backups/` off this Mac.
@@ -40,7 +40,7 @@ Nav **Month** (or Dashboard → **Month**) — one page for the monthly ritual:
 | Step | What it does |
 |------|----------------|
 | 1. Post income | Creates salary/credit transactions from templates |
-| 2. Fund Joint | Suhel + Seema → Joint with shared envelope plan |
+| 2. Fund Joint | Person 1 + Person 2 → Joint with shared envelope plan |
 | 3. Post SIPs | Due SIP contributions (if configured) |
 | 4. Net worth snapshot | Locks the month for growth charts |
 
@@ -55,7 +55,7 @@ Dashboard also shows the same items as reminders, plus backup and insurance when
 
 - **Accounts** page lists spending accounts and fund accounts.
 - Click an account name/balance to open **Transactions filtered to that account**. Filters stay after add/edit/delete.
-- **Emergency tags** — tag how much of Suhel/Seema/Joint/FD cash counts as emergency (no transfer). Unlock with **Edit emergency tags**, save to lock.
+- **Emergency tags** — tag how much of your account / Joint / FD cash counts as emergency (no transfer). Unlock with **Edit emergency tags**, save to lock.
 - Investments can also count toward Emergency when their purpose/goal is Emergency Fund.
 
 ### Statement wizard
@@ -107,7 +107,7 @@ On a transfer to Joint, use **Envelope split** rows, or leave empty to default *
 
 **Settings → Joint Funding** (or Month checklist / Dashboard **Fund Joint** when ready).
 
-1. **Who contributes** — e.g. Suhel ₹30,000 + Seema ₹70,000 = Joint total ₹1,00,000.
+1. **Who contributes** — e.g. Person 1 ₹30,000 + Person 2 ₹70,000 = Joint total ₹1,00,000.
 2. **Shared envelope plan** — e.g. Essentials 1.35L, Shopping 45k, Travel 45k, Lifestyle 15k.  
    Leftover automatically goes to **Unallocated**.
 3. You do **not** enter a separate envelope split per person.
@@ -127,11 +127,11 @@ One-off transfers can still use the manual split on the transaction form.
 | What | Monthly **limits** for the Essentials household plan | **Labels** on cash in Joint |
 | Typical total | ~₹1.5L (Rent, groceries, utilities, cook…) | Funded when you Post Fund Joint |
 | Dining / movies | Not on Budget | Fund **Lifestyle** pot (~₹15k) |
-| Parents (Suhel/Seema) | Not on Budget | No envelope (personal account) |
+| Parents (personal) | Not on Budget | No envelope (personal account) |
 | Shop / travel | Not on Budget | **Shopping** / **Travel** pots |
 
 - Pay from **Joint** → expense can reduce that category’s envelope (e.g. Dining → Lifestyle).
-- Pay from **Suhel / Seema** → counts in history / personal balance; **Budget** only if the category is on the Essentials plan; **no** envelope hit.
+- Pay from **personal accounts** → counts in history / personal balance; **Budget** only if the category is on the Essentials plan; **no** envelope hit.
 
 ### Envelopes page
 
@@ -270,7 +270,7 @@ Dining is off Budget; it draws the **Lifestyle** envelope when paid from Joint. 
 **Why is Joint negative?**  
 Expenses hit Joint before you posted **Fund Joint**. Post funding (or a manual transfer in) — the balance catches up. Recalculate is not required for this case.
 
-**I opened Suhel’s ledger, then after saving a txn I see everyone’s transactions.**  
+**I opened a personal ledger, then after saving a txn I see everyone's transactions.**  
 Account (and other) filters are kept after add/edit/delete. If you still see everything, check the account filter dropdown or use **Clear filter**.
 
 **When should I Recalculate balances?**  

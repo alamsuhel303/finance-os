@@ -252,7 +252,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function applyInvestmentDefaults() {
     if (defaults.isEdit) return;
     if (typeSelect?.value !== "investment") return;
-    // Default debit from self bank (Suhel / My Account)
+    // Default debit from self bank (primary account)
     if (accountSelect && defaults.fromId && !accountTouched) {
       accountSelect.value = String(defaults.fromId);
     }
