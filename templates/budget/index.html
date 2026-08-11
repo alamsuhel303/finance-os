@@ -101,8 +101,8 @@
       <p class="page-subtitle mb-0">
         <strong>Budget</strong> = monthly limits (any account).
         <strong>Envelopes</strong> = labels on Joint cash only — funded when you
-        <a href="{{ url_for('settings.joint_funding_edit') }}">Fund Joint</a>.
-        Suhel/Seema spends count in Budget, not in envelopes.
+        <a href="{{ url_for('settings.joint_funding_edit') }}">{% if is_couple_mode %}Fund Joint{% else %}Fund Expenses{% endif %}</a>.
+        {{ personal_label }} spends count in Budget, not in envelopes.
       </p>
     </div>
     <a href="{{ url_for('envelopes.index') }}" class="btn btn-ghost btn-sm">Open Envelopes</a>
@@ -121,7 +121,7 @@
           {% endif %}
         </div>
       {% endfor %}
-      <a href="{{ url_for('settings.joint_funding_edit') }}" class="btn btn-ghost btn-sm mt-2">Add to Fund Joint plan</a>
+      <a href="{{ url_for('settings.joint_funding_edit') }}" class="btn btn-ghost btn-sm mt-2">Add to {% if is_couple_mode %}Fund Joint{% else %}Fund Expenses{% endif %} plan</a>
     </div>
   {% endif %}
 </div>

@@ -131,7 +131,9 @@
           <div>
             <label class="form-label mb-0">Envelope split</label>
             <div class="form-text">
-              Tags purpose in Joint. If left empty on Self/Wife → Joint, defaults to
+              Tags purpose on
+              {% if is_couple_mode %}Joint{% else %}the Expenses account{% endif %}.
+              If left empty on a salary → spending transfer, defaults to
               <strong>Essentials</strong>. Custom splits must sum to the transfer amount.
             </div>
           </div>
@@ -169,13 +171,24 @@
       <div class="col-md-4 paid-by-fields hidden" id="paidByFields">
         <label class="form-label" for="paid_by">Paid By</label>
         <select class="form-select" id="paid_by" name="paid_by">
-          {% for p in paid_by_choices %}
-            <option value="{{ p }}" {% if form_data.get('paid_by', 'self') == p %}selected{% endif %}>
-              {{ p | capitalize }}
-            </option>
-          {% endfor %}
+          <option value="self" {% if form_data.get('paid_by', 'self') == 'self' %}selected{% endif %}>
+            {{ person1_name }}
+          </option>
+          {% if is_couple_mode and person2_name %}
+          <option value="wife" {% if form_data.get('paid_by') == 'wife' %}selected{% endif %}>
+            {{ person2_name }}
+          </option>
+          {% endif %}
+          {% if is_couple_mode %}
+          <option value="joint" {% if form_data.get('paid_by') == 'joint' %}selected{% endif %}>
+            Joint
+          </option>
+          {% endif %}
         </select>
-        <div class="form-text">Who’s expense when paying from Joint</div>
+        <div class="form-text">
+          Who’s expense when paying from
+          {% if is_couple_mode %}Joint{% else %}Expenses{% endif %}
+        </div>
       </div>
 
       <div class="col-md-4 payment-mode-fields {% if form_data.get('transaction_type') == 'income' %}hidden{% endif %}" id="paymentModeFields">

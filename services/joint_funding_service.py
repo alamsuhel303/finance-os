@@ -1,4 +1,4 @@
-"""Joint funding — monthly Suhel/Seema → Joint plan, status, and posting."""
+"""Monthly funding — couple: Person1/Person2 → Joint; solo: Salary → Expenses."""
 
 from __future__ import annotations
 
@@ -22,7 +22,45 @@ class JointFundingValidationError(ValueError):
 
 OWNER_SELF = "self"
 OWNER_WIFE = "wife"
-OWNER_LABELS = {OWNER_SELF: "Suhel", OWNER_WIFE: "Seema"}
+
+
+def _owner_labels() -> dict[str, str]:
+    from services import profile_service
+    return profile_service.get_owner_labels()
+
+
+def _is_couple() -> bool:
+    from services import profile_service
+    return profile_service.is_couple_mode()
+
+
+def funding_ui() -> dict[str, str]:
+    """Mode-aware labels for checklist, settings, and flash messages."""
+    dest = resolve_joint_account()
+    dest_name = dest.name if dest else ("Joint Account" if _is_couple() else "Expenses")
+    if _is_couple():
+        return {
+            "title": "Fund Joint",
+            "plan_title": "Joint Funding Plan",
+            "section_title": "Joint Funding",
+            "short": "Joint",
+            "destination_name": dest_name,
+            "description_prefix": "Joint funding",
+            "blurb": "Move household cash + label envelopes",
+            "setup_detail": "Set contribution amounts and envelope plan in Settings.",
+            "contrib_hint": "Who pays into Joint · one shared envelope plan",
+        }
+    return {
+        "title": "Fund Expenses",
+        "plan_title": "Expenses Funding Plan",
+        "section_title": "Expenses Funding",
+        "short": "Expenses",
+        "destination_name": dest_name,
+        "description_prefix": "Expenses funding",
+        "blurb": "Move monthly cash from salary → expenses + label envelopes",
+        "setup_detail": "Set the monthly salary → expenses transfer and envelope plan.",
+        "contrib_hint": "Monthly transfer from salary into Expenses · one shared envelope plan",
+    }
 
 
 def get_plan() -> JointFundingPlan | None:
@@ -41,8 +79,8 @@ def get_or_init_plan() -> JointFundingPlan:
     if plan:
         return plan
     plan = JointFundingPlan(
-        self_account_id=_default_account_id(OWNER_SELF),
-        wife_account_id=_default_account_id(OWNER_WIFE),
+        self_account_id=_default_source_account_id(OWNER_SELF),
+        wife_account_id=_default_source_account_id(OWNER_WIFE) if _is_couple() else None,
         self_amount=Decimal("0"),
         wife_amount=Decimal("0"),
         day_of_month=1,
@@ -52,10 +90,10 @@ def get_or_init_plan() -> JointFundingPlan:
 
 
 def resolve_joint_account() -> Account | None:
-    return (
-        Account.query.filter_by(name="Joint Account", is_active=True).first()
-        or Account.query.filter_by(owner="joint", is_active=True).first()
-    )
+    """Destination pool: Joint (couple) or Expenses (solo)."""
+    from services import envelope_service
+
+    return envelope_service.resolve_envelope_cash_account()
 
 
 def save_plan(data: dict[str, Any]) -> JointFundingPlan:
@@ -64,28 +102,43 @@ def save_plan(data: dict[str, Any]) -> JointFundingPlan:
     if is_new:
         plan = JointFundingPlan()
 
+    couple = _is_couple()
+    ui = funding_ui()
     self_amount = parse_nonneg_amount(data.get("self_amount"))
-    wife_amount = parse_nonneg_amount(data.get("wife_amount"))
+    wife_amount = parse_nonneg_amount(data.get("wife_amount") if couple else "0")
     if self_amount is None or wife_amount is None:
         raise JointFundingValidationError("Contribution amounts must be non-negative.")
 
     self_account_id = _optional_int(data.get("self_account_id"))
-    wife_account_id = _optional_int(data.get("wife_account_id"))
+    wife_account_id = _optional_int(data.get("wife_account_id")) if couple else None
     if self_amount > 0 and not self_account_id:
-        raise JointFundingValidationError("Choose Suhel’s account.")
-    if wife_amount > 0 and not wife_account_id:
-        raise JointFundingValidationError("Choose Seema’s account.")
+        labels = _owner_labels()
+        raise JointFundingValidationError(f"Choose {labels.get('self', 'Person 1')}'s account.")
+    if couple and wife_amount > 0 and not wife_account_id:
+        labels = _owner_labels()
+        raise JointFundingValidationError(f"Choose {labels.get('wife', 'Person 2')}'s account.")
     if self_account_id and not _active_account(self_account_id):
-        raise JointFundingValidationError("Suhel account not found.")
+        labels = _owner_labels()
+        raise JointFundingValidationError(f"{labels.get('self', 'Person 1')} account not found.")
     if wife_account_id and not _active_account(wife_account_id):
-        raise JointFundingValidationError("Seema account not found.")
+        labels = _owner_labels()
+        raise JointFundingValidationError(f"{labels.get('wife', 'Person 2')} account not found.")
+    dest = resolve_joint_account()
+    if self_account_id and dest and self_account_id == dest.id and self_amount > 0:
+        raise JointFundingValidationError(
+            f"Source account must be different from {ui['destination_name']}."
+        )
     if (
-        self_account_id
+        couple
+        and self_account_id
         and wife_account_id
         and self_account_id == wife_account_id
         and (self_amount > 0 or wife_amount > 0)
     ):
-        raise JointFundingValidationError("Suhel and Seema must use different accounts.")
+        labels = _owner_labels()
+        raise JointFundingValidationError(
+            f"{labels.get('self', 'Person 1')} and {labels.get('wife', 'Person 2')} must use different accounts."
+        )
 
     day = 1
     try:
@@ -96,13 +149,13 @@ def save_plan(data: dict[str, Any]) -> JointFundingPlan:
         raise JointFundingValidationError("Day of month must be 1–28.")
 
     splits = _parse_split_rows(data)
-    total = self_amount + wife_amount
+    total = self_amount + (wife_amount if couple else Decimal("0"))
     splits = _with_unallocated_remainder(splits, total)
 
     plan.self_account_id = self_account_id
-    plan.wife_account_id = wife_account_id
+    plan.wife_account_id = wife_account_id if couple else None
     plan.self_amount = self_amount
-    plan.wife_amount = wife_amount
+    plan.wife_amount = wife_amount if couple else Decimal("0")
     plan.day_of_month = day
     plan.notes = (data.get("notes") or "").strip() or None
     plan.is_active = str(data.get("is_active") or "").lower() in (
@@ -156,6 +209,7 @@ def get_month_status(
             "posted_total": Decimal("0"),
             "rows": [],
             "joint_account": resolve_joint_account(),
+            "ui": funding_ui(),
         }
 
     joint = resolve_joint_account()
@@ -164,11 +218,15 @@ def get_month_status(
     posted = 0
     ready_total = Decimal("0")
     posted_total = Decimal("0")
-
-    for owner, amount, account_id in (
+    contribs = [
         (OWNER_SELF, Decimal(plan.self_amount or 0), plan.self_account_id),
-        (OWNER_WIFE, Decimal(plan.wife_amount or 0), plan.wife_account_id),
-    ):
+    ]
+    if _is_couple():
+        contribs.append(
+            (OWNER_WIFE, Decimal(plan.wife_amount or 0), plan.wife_account_id)
+        )
+
+    for owner, amount, account_id in contribs:
         already = posted_for_month(owner, year, month, account_id=account_id)
         if already:
             status = "posted"
@@ -183,7 +241,7 @@ def get_month_status(
         rows.append(
             {
                 "owner": owner,
-                "label": OWNER_LABELS[owner],
+                "label": _owner_labels()[owner],
                 "amount": amount,
                 "account_id": account_id,
                 "status": status,
@@ -204,6 +262,7 @@ def get_month_status(
         "posted_total": posted_total,
         "rows": rows,
         "joint_account": joint,
+        "ui": funding_ui(),
         "split_total": sum(
             (Decimal(s.amount or 0) for s in plan.splits), Decimal("0")
         ),
@@ -211,9 +270,9 @@ def get_month_status(
 
 
 def description_for(owner: str, year: int, month: int) -> str:
-    label = OWNER_LABELS.get(owner, owner)
+    label = _owner_labels().get(owner, owner)
     month_label = date(year, month, 1).strftime("%b %Y")
-    return f"Joint funding · {label} · {month_label}"
+    return f"{funding_ui()['description_prefix']} · {label} · {month_label}"
 
 
 def posted_for_month(
@@ -241,12 +300,17 @@ def post_month(
     status = get_month_status(year, month)
     plan = status["plan"]
     joint = status["joint_account"]
+    ui = funding_ui()
     if not plan or not plan.is_active:
-        raise JointFundingValidationError("Set up a Joint funding plan in Settings first.")
+        raise JointFundingValidationError(
+            f"Set up an {ui['section_title']} plan in Settings first."
+        )
     if not joint:
-        raise JointFundingValidationError("Joint account not found.")
+        raise JointFundingValidationError(f"{ui['destination_name']} account not found.")
 
-    total = Decimal(plan.self_amount or 0) + Decimal(plan.wife_amount or 0)
+    total = Decimal(plan.self_amount or 0)
+    if _is_couple():
+        total += Decimal(plan.wife_amount or 0)
     plan_splits = effective_plan_splits(plan)
     if status["ready_count"] == 0:
         return {
@@ -255,6 +319,7 @@ def post_month(
             "created": [],
             "label": status["label"],
             "total": Decimal("0"),
+            "ui": ui,
         }
     if total <= 0:
         raise JointFundingValidationError("Plan amounts are zero — nothing to post.")
@@ -281,7 +346,7 @@ def post_month(
             "paid_by": row["owner"],
             "payment_mode": "netbanking",
             "need_want": "n/a",
-            "notes": plan.notes or "Posted from Joint funding plan",
+            "notes": plan.notes or f"Posted from {ui['section_title']} plan",
             "split_envelope_id": [eid for eid, _ in person_splits],
             "split_amount": [str(amt) for _, amt in person_splits],
         }
@@ -294,6 +359,7 @@ def post_month(
         "created": created,
         "label": status["label"],
         "total": sum((Decimal(t.amount or 0) for t in created), Decimal("0")),
+        "ui": ui,
     }
 
 
@@ -360,7 +426,9 @@ def editable_split_rows(plan: JointFundingPlan | None) -> list[dict[str, Any]]:
 
 def effective_plan_splits(plan: JointFundingPlan) -> list[tuple[int, Decimal]]:
     """Stored splits with Unallocated remainder filled to match contribution total."""
-    total = Decimal(plan.self_amount or 0) + Decimal(plan.wife_amount or 0)
+    total = Decimal(plan.self_amount or 0)
+    if _is_couple():
+        total += Decimal(plan.wife_amount or 0)
     raw = [
         (s.envelope_id, Decimal(s.amount or 0))
         for s in (plan.splits or [])
@@ -373,13 +441,14 @@ def _with_unallocated_remainder(
     splits: list[tuple[int, Decimal]], total: Decimal
 ) -> list[tuple[int, Decimal]]:
     """
-    One shared Joint envelope plan: named pots + leftover → Unallocated.
+    One shared envelope plan: named pots + leftover → Unallocated.
 
     Example: total 1,00,000 · Essentials 50k · Shopping 15k · Travel 15k
     → Unallocated auto 20k. Contributions (30k / 70k) are separate.
     """
     unalloc = get_unallocated_envelope()
     unalloc_id = unalloc.id if unalloc else None
+    ui = funding_ui()
 
     cleaned: list[tuple[int, Decimal]] = []
     seen: set[int] = set()
@@ -397,9 +466,16 @@ def _with_unallocated_remainder(
     if total < 0:
         raise JointFundingValidationError("Contribution total is invalid.")
     if named_sum > total:
+        labels = _owner_labels()
+        p1 = labels.get("self", "Person 1")
+        if _is_couple():
+            p2 = labels.get("wife", "Person 2")
+            raise_hint = f"Lower the envelope lines or raise {p1} + {p2} contributions."
+        else:
+            raise_hint = f"Lower the envelope lines or raise the {ui['short']} transfer amount."
         raise JointFundingValidationError(
-            f"Envelope amounts ({named_sum}) exceed Joint total ({total}). "
-            "Lower the envelope lines or raise Suhel + Seema contributions."
+            f"Envelope amounts ({named_sum}) exceed {ui['short']} total ({total}). "
+            + raise_hint
         )
 
     remainder = total - named_sum
@@ -448,14 +524,23 @@ def _parse_split_rows(data: dict[str, Any]) -> list[tuple[int, Decimal]]:
     return splits
 
 
-def _default_account_id(owner: str) -> int | None:
-    acc = (
+def _default_source_account_id(owner: str) -> int | None:
+    """Prefer a salary/bank source — never the Expenses destination in solo."""
+    accounts = (
         Account.query.filter_by(owner=owner, is_active=True)
         .filter(Account.account_type.in_(("bank", "salary", "cash")))
         .order_by(Account.sort_order, Account.name)
-        .first()
+        .all()
     )
-    return acc.id if acc else None
+    dest = resolve_joint_account()
+    dest_id = dest.id if dest else None
+    candidates = [a for a in accounts if a.id != dest_id]
+    if not candidates:
+        return None
+    for acc in candidates:
+        if "salary" in (acc.name or "").lower() or acc.account_type == "salary":
+            return acc.id
+    return candidates[0].id
 
 
 def _active_account(account_id: int) -> Account | None:

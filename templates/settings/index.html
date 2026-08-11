@@ -99,9 +99,9 @@
 <div class="glass-card mb-4">
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <div>
-      <h2 class="section-title mb-0">Joint Funding</h2>
+      <h2 class="section-title mb-0">{{ funding_ui.section_title }}</h2>
       <p class="page-subtitle mb-0 mt-1">
-        Who pays into Joint · one shared envelope plan (leftover → Unallocated)
+        {{ funding_ui.contrib_hint }} (leftover → Unallocated)
         {% if joint_status.ready_count %}
           · <strong>{{ joint_status.ready_count }} ready for {{ joint_status.label }}</strong>
         {% elif joint_plan and joint_plan.is_active %}
@@ -163,7 +163,11 @@
     {% endif %}
   {% else %}
     <div class="stat-meta">
-      Set Suhel/Seema contributions and label the Joint pool (Essentials, Shopping…).
+      {% if is_couple_mode %}
+        Set {{ personal_label }} contributions and label the Joint pool (Essentials, Shopping…).
+      {% else %}
+        Set the monthly transfer from salary into Expenses and label pots (Essentials, Shopping…).
+      {% endif %}
       Leftover goes to Unallocated. Manual transfers with custom splits still work anytime.
     </div>
   {% endif %}
@@ -234,7 +238,7 @@
       </table>
     </div>
   {% else %}
-    <div class="stat-meta">No templates yet — add Suhel / Seema salary so Monthly Income can be posted in one click.</div>
+    <div class="stat-meta">No templates yet — add {{ personal_label }} salary so Monthly Income can be posted in one click.</div>
   {% endif %}
 </div>
 

@@ -109,15 +109,16 @@ def get_month_reminders(ref: date | None = None) -> list[dict[str, Any]]:
             for row in joint["rows"]
             if row["status"] == "ready"
         ]
+        ui = joint.get("ui") or joint_funding_service.funding_ui()
         reminders.append(
             {
                 "key": "joint_fund",
                 "severity": "warning",
-                "title": f"Fund Joint for {joint['label']}",
+                "title": f"{ui['title']} for {joint['label']}",
                 "detail": " · ".join(parts) if parts else f"{float(joint['ready_total']):,.0f} ready",
                 "actions": [
                     {
-                        "label": "Post Fund Joint",
+                        "label": f"Post {ui['title']}",
                         "url": "settings.post_joint_funding",
                         "method": "POST",
                     },

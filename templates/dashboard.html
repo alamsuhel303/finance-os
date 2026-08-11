@@ -73,7 +73,7 @@
   </div>
   <div class="col-6 col-xl-3">
     <div class="glass-card stat-card delay-4">
-      <div class="stat-label">Joint left</div>
+      <div class="stat-label">{% if is_couple_mode %}Joint left{% else %}Expenses left{% endif %}</div>
       <div class="stat-value privacy-blur" data-privacy>{{ summary.joint_balance | inr }}</div>
       <div class="stat-meta">
         {{ summary.joint_account_name }} cash on hand

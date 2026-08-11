@@ -77,6 +77,7 @@ def index():
         income_status=income_status,
         joint_status=joint_status,
         joint_plan=joint_plan,
+        funding_ui=joint_funding_service.funding_ui(),
         config_backup_days=current_app.config.get("BACKUP_MAX_AGE_DAYS", 7),
         currency=current_app.config["CURRENCY_SYMBOL"],
         page_title="Settings",
@@ -296,11 +297,12 @@ def joint_funding_edit():
         if e.slug != "unallocated"
     ]
     joint = joint_funding_service.resolve_joint_account()
+    funding_ui = joint_funding_service.funding_ui()
 
     if request.method == "POST":
         try:
             joint_funding_service.save_plan(request.form)
-            flash("Joint funding plan saved.", "success")
+            flash(f"{funding_ui['section_title']} plan saved.", "success")
             return redirect(url_for("settings.index"))
         except JointFundingValidationError as exc:
             flash(str(exc), "danger")
@@ -326,8 +328,9 @@ def joint_funding_edit():
         accounts=accounts,
         envelopes=envelopes,
         joint_account=joint,
+        funding_ui=funding_ui,
         currency=current_app.config["CURRENCY_SYMBOL"],
-        page_title="Joint Funding Plan",
+        page_title=funding_ui["plan_title"],
         active_nav="settings",
     )
 
@@ -336,9 +339,10 @@ def joint_funding_edit():
 def post_joint_funding():
     try:
         result = joint_funding_service.post_month()
+        ui = result.get("ui") or joint_funding_service.funding_ui()
         if result["created_count"]:
             flash(
-                f"Funded Joint for {result['label']}: "
+                f"{ui['title']} for {result['label']}: "
                 f"{result['created_count']} transfer"
                 f"{'s' if result['created_count'] != 1 else ''} "
                 f"· {result['total']}.",

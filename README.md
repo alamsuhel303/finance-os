@@ -75,7 +75,7 @@ finance-os/
 ## What’s Built
 
 ### Core ledger
-- **Accounts** — Suhel / Seema / Joint (+ funds). Click an account to see its filtered ledger.
+- **Accounts** — Personal / Joint (+ funds). Click an account to see its filtered ledger.
 - **Statement wizard** — align opening/current to bank balances as of a date.
 - **Transactions** — expense, income, transfer, investment, refund. Filters preserved after add/edit/delete.
 - **Categories** — manage under Settings (create / rename / deactivate).
@@ -83,7 +83,7 @@ finance-os/
 
 ### Household cash model
 - **Envelopes** — virtual purpose pots (Essentials, Shopping, Travel, Lifestyle, Unallocated) on Joint cash. **Move between pots** corrects labels after Fund Joint without moving bank money.
-- **Joint funding plan** — Settings: Suhel + Seema amounts + shared envelope plan (include Lifestyle for dining). Leftover → Unallocated. Dashboard / Month “Fund Joint” posts both transfers (plan edits after posting need Move between pots for the current month).
+- **Joint funding plan** — Settings: Person 1 + Person 2 amounts + shared envelope plan (include Lifestyle for dining). Leftover → Unallocated. Dashboard / Month “Fund Joint” posts both transfers (plan edits after posting need Move between pots for the current month).
 - **Emergency Fund** — virtual tags on spending accounts + investments marked for Emergency goal (no separate transfer account required).
 
 ### Planning & wealth

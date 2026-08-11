@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 from extensions import db
-from models import Account, Budget, Category, Envelope, Goal, Investment, Transaction
+from models import Account, Budget, Category, Envelope, Goal, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ ENVELOPE_PURPOSE_CATEGORY_SLUGS = frozenset(
 
 # Outside the ~₹1.5L Essentials household Budget.
 # Still bookable; tracked via envelopes / personal accounts instead.
-# Dining/movies → fund Lifestyle pot; Parents → usually Suhel/Seema.
+# Dining/movies → fund Lifestyle pot; Parents → usually personal accounts.
 BUDGET_EXCLUDED_CATEGORY_SLUGS = frozenset(
     {
         "parents",
@@ -71,10 +71,8 @@ CATEGORY_RENAMES = {
     "Lifestyle": "Movies & Entertainment",
 }
 
-DEFAULT_ACCOUNTS = [
-    {"name": "My Account", "account_type": "bank", "owner": "self", "sort_order": 1},
-    {"name": "Wife Account", "account_type": "bank", "owner": "wife", "sort_order": 2},
-    {"name": "Joint Account", "account_type": "joint", "owner": "joint", "sort_order": 3},
+# Shared fund accounts (seeded regardless of mode)
+_SHARED_ACCOUNTS = [
     # Emergency is virtual tags on accounts/investments — no separate cash account
     {"name": "Home Fund", "account_type": "goal", "owner": "joint", "sort_order": 5},
     {"name": "Travel Fund", "account_type": "goal", "owner": "joint", "sort_order": 6},
@@ -93,7 +91,66 @@ DEFAULT_ACCOUNTS = [
     {"name": "Cash", "account_type": "cash", "owner": "joint", "sort_order": 9},
 ]
 
-# One-time renames for existing DBs created before clearer naming
+
+def _get_core_accounts() -> list[dict]:
+    """Personal/joint core accounts from AppProfile. Empty until setup completes."""
+    from services import profile_service
+
+    profile = profile_service.get_profile()
+    if not profile or not profile.is_setup_complete:
+        return []
+
+    p1 = (profile.person1_name or "Person 1").strip() or "Person 1"
+    if profile.mode == "single":
+        return [
+            {
+                "name": f"{p1} Salary",
+                "account_type": "bank",
+                "owner": "self",
+                "sort_order": 1,
+                "role": "salary",
+            },
+            {
+                "name": f"{p1} Expenses",
+                "account_type": "cash",
+                "owner": "self",
+                "sort_order": 2,
+                "role": "expenses",
+            },
+        ]
+
+    p2 = (profile.person2_name or "Partner").strip() or "Partner"
+    return [
+        {
+            "name": f"{p1} Salary",
+            "account_type": "bank",
+            "owner": "self",
+            "sort_order": 1,
+            "role": "salary",
+        },
+        {
+            "name": f"{p2} Salary",
+            "account_type": "bank",
+            "owner": "wife",
+            "sort_order": 2,
+            "role": "salary",
+        },
+        {
+            "name": "Joint Account",
+            "account_type": "joint",
+            "owner": "joint",
+            "sort_order": 3,
+            "role": "joint",
+        },
+    ]
+
+
+def _get_default_accounts() -> list[dict]:
+    """Full account list: profile core (if set up) + shared funds."""
+    return _get_core_accounts() + _SHARED_ACCOUNTS
+
+
+# Legacy renames only (pre-profile era). Profile sync handles Suhel/My Account → {Name} Salary.
 ACCOUNT_RENAMES = {
     "My Salary": "My Account",
     "Wife Salary": "Wife Account",
@@ -138,63 +195,183 @@ def slugify(value: str) -> str:
 
 
 def seed_accounts() -> int:
-    """Create missing default accounts — never recreate renamed core accounts.
+    """Create/sync accounts from profile + shared funds.
 
-    My / Wife / Joint are treated as present if any account already exists for
-    that owner (+ type for joint), even if the user renamed them.
-    Fund accounts (Emergency, Home, …) still match by name or type.
+    Core personal accounts are only created after setup. Existing owner-matched
+    accounts are renamed to the profile names (no duplicate empty copies).
     """
-    created = 0
-    for item in DEFAULT_ACCOUNTS:
-        if _default_account_already_present(item):
+    touched = sync_core_accounts_from_profile()
+    for item in _SHARED_ACCOUNTS:
+        if _shared_account_present(item):
             continue
-        account = Account(
-            name=item["name"],
-            account_type=item["account_type"],
-            owner=item["owner"],
-            opening_balance=Decimal("0"),
-            current_balance=Decimal("0"),
-            sort_order=item["sort_order"],
-            is_active=True,
+        db.session.add(
+            Account(
+                name=item["name"],
+                account_type=item["account_type"],
+                owner=item["owner"],
+                opening_balance=Decimal("0"),
+                current_balance=Decimal("0"),
+                sort_order=item["sort_order"],
+                is_active=True,
+            )
         )
-        db.session.add(account)
-        created += 1
-    return created
+        touched += 1
+    return touched
 
 
-def _default_account_already_present(item: dict) -> bool:
-    name = item["name"]
+def _shared_account_present(item: dict) -> bool:
+    if Account.query.filter_by(name=item["name"]).first():
+        return True
     account_type = item["account_type"]
+    # One fund pot per type is enough (user may have renamed)
+    if account_type in ("emergency", "investment", "goal"):
+        return (
+            Account.query.filter_by(account_type=account_type, name=item["name"]).first()
+            is not None
+            or Account.query.filter_by(name=item["name"]).first() is not None
+        )
+    if account_type == "cash" and item["name"] == "Cash":
+        return Account.query.filter_by(name="Cash").first() is not None
+    return False
+
+
+def _account_is_empty(account: Account) -> bool:
+    bal = Decimal(account.current_balance or 0)
+    if bal != 0:
+        return False
+    txns = Transaction.query.filter(
+        (Transaction.account_id == account.id)
+        | (Transaction.to_account_id == account.id)
+    ).count()
+    return txns == 0
+
+
+def _account_rank(account: Account) -> tuple:
+    """Higher rank = prefer keeping this account (has money/history)."""
+    bal = abs(Decimal(account.current_balance or 0))
+    txns = Transaction.query.filter(
+        (Transaction.account_id == account.id)
+        | (Transaction.to_account_id == account.id)
+    ).count()
+    return (txns > 0, bal, -account.id)
+
+
+def _find_core_match(item: dict) -> Account | None:
+    """Find the best existing account for a profile core slot (by role/owner).
+
+    Prefers accounts with balance/transactions over empty name-matched shells.
+    """
+    role = item.get("role")
     owner = item["owner"]
 
-    if Account.query.filter_by(name=name).first():
-        return True
+    if role == "joint" or item["account_type"] == "joint":
+        candidates = Account.query.filter(
+            (Account.account_type == "joint") | (Account.name == "Joint Account")
+        ).all()
+        return max(candidates, key=_account_rank) if candidates else None
 
-    # Core spending accounts: respect renames (don't re-seed empty copies)
-    if name == "My Account" and owner == "self":
-        return (
-            Account.query.filter(
-                Account.owner == "self",
-                Account.account_type.in_(("bank", "salary")),
-            ).first()
-            is not None
+    if role == "expenses":
+        candidates = (
+            Account.query.filter_by(owner="self", is_active=True)
+            .order_by(Account.sort_order, Account.id)
+            .all()
         )
-    if name == "Wife Account" and owner == "wife":
-        return (
-            Account.query.filter(
-                Account.owner == "wife",
-                Account.account_type.in_(("bank", "salary")),
-            ).first()
-            is not None
+        named = [a for a in candidates if "expense" in (a.name or "").lower()]
+        if named:
+            return max(named, key=_account_rank)
+        soft = [
+            a
+            for a in candidates
+            if a.account_type == "cash" and (a.name or "") != "Cash"
+        ]
+        return max(soft, key=_account_rank) if soft else None
+
+    # salary / personal bank — pick richest self/wife bank, not an empty rename shell
+    candidates = (
+        Account.query.filter(
+            Account.owner == owner,
+            Account.account_type.in_(("bank", "salary")),
+            Account.is_active.is_(True),
         )
-    if name == "Joint Account" and account_type == "joint":
-        return Account.query.filter_by(account_type="joint").first() is not None
+        .all()
+    )
+    return max(candidates, key=_account_rank) if candidates else None
 
-    # Fund pots: one per type is enough (user may have renamed)
-    if account_type in ("emergency", "investment", "cash"):
-        return Account.query.filter_by(account_type=account_type).first() is not None
 
-    return False
+def sync_core_accounts_from_profile() -> int:
+    """Rename/create core accounts to match AppProfile. Safe to run every startup."""
+    from services import profile_service
+
+    if not profile_service.is_setup_complete():
+        return 0
+
+    touched = 0
+    keep_ids: set[int] = set()
+
+    for item in _get_core_accounts():
+        match = _find_core_match(item)
+        if match:
+            keep_ids.add(match.id)
+            if match.name != item["name"]:
+                conflict = Account.query.filter_by(name=item["name"]).first()
+                if conflict and conflict.id != match.id:
+                    if _account_is_empty(conflict):
+                        db.session.delete(conflict)
+                        db.session.flush()
+                    else:
+                        logger.warning(
+                            "Skip rename %r → %r; target name already in use",
+                            match.name,
+                            item["name"],
+                        )
+                        continue
+                match.name = item["name"]
+                touched += 1
+            if item["account_type"] == "bank" and match.account_type == "salary":
+                match.account_type = "bank"
+                touched += 1
+            if match.account_type != item["account_type"] and item.get("role") == "expenses":
+                match.account_type = item["account_type"]
+                touched += 1
+            if match.sort_order != item["sort_order"]:
+                match.sort_order = item["sort_order"]
+            if match.owner != item["owner"]:
+                match.owner = item["owner"]
+                touched += 1
+        else:
+            acc = Account(
+                name=item["name"],
+                account_type=item["account_type"],
+                owner=item["owner"],
+                opening_balance=Decimal("0"),
+                current_balance=Decimal("0"),
+                sort_order=item["sort_order"],
+                is_active=True,
+            )
+            db.session.add(acc)
+            db.session.flush()
+            keep_ids.add(acc.id)
+            touched += 1
+
+    # Drop empty duplicate personal bank accounts left over from earlier seeds
+    for owner in ("self", "wife"):
+        banks = (
+            Account.query.filter(
+                Account.owner == owner,
+                Account.account_type.in_(("bank", "salary")),
+                Account.is_active.is_(True),
+            )
+            .order_by(Account.sort_order, Account.id)
+            .all()
+        )
+        for acc in banks:
+            if acc.id in keep_ids:
+                continue
+            if _account_is_empty(acc):
+                db.session.delete(acc)
+                touched += 1
+
+    return touched
 
 
 def migrate_account_names() -> int:
@@ -397,14 +574,14 @@ def seed_budgets_for_month(year: int | None = None, month: int | None = None) ->
 
 
 def seed_goals() -> int:
-    """Seed default life goals linked to matching accounts when present."""
+    """Seed default life goal shells — amounts start at 0; user fills targets."""
     defaults = [
         {
             "name": "Emergency Fund",
             "slug": "emergency-fund",
             "goal_type": "emergency",
-            "target_amount": Decimal("600000"),
-            "monthly_contribution": Decimal("25000"),
+            "target_amount": Decimal("0"),
+            "monthly_contribution": Decimal("0"),
             "account_name": None,  # virtual tags — see emergency_service
             "icon": "bi-shield-check",
             "color": "#2dd4bf",
@@ -414,8 +591,8 @@ def seed_goals() -> int:
             "name": "Home Fund",
             "slug": "home-fund",
             "goal_type": "home",
-            "target_amount": Decimal("5000000"),
-            "monthly_contribution": Decimal("50000"),
+            "target_amount": Decimal("0"),
+            "monthly_contribution": Decimal("0"),
             "account_name": "Home Fund",
             "icon": "bi-house-heart",
             "color": "#60a5fa",
@@ -425,8 +602,8 @@ def seed_goals() -> int:
             "name": "Travel Fund",
             "slug": "travel-fund",
             "goal_type": "travel",
-            "target_amount": Decimal("300000"),
-            "monthly_contribution": Decimal("10000"),
+            "target_amount": Decimal("0"),
+            "monthly_contribution": Decimal("0"),
             "account_name": "Travel Fund",
             "icon": "bi-airplane",
             "color": "#a78bfa",
@@ -436,8 +613,8 @@ def seed_goals() -> int:
             "name": "Car Fund",
             "slug": "car-fund",
             "goal_type": "car",
-            "target_amount": Decimal("1200000"),
-            "monthly_contribution": Decimal("15000"),
+            "target_amount": Decimal("0"),
+            "monthly_contribution": Decimal("0"),
             "account_name": None,
             "icon": "bi-car-front",
             "color": "#fb923c",
@@ -447,8 +624,8 @@ def seed_goals() -> int:
             "name": "Retirement",
             "slug": "retirement",
             "goal_type": "retirement",
-            "target_amount": Decimal("50000000"),
-            "monthly_contribution": Decimal("40000"),
+            "target_amount": Decimal("0"),
+            "monthly_contribution": Decimal("0"),
             "account_name": "Investment Account",
             "icon": "bi-sunrise",
             "color": "#fbbf24",
@@ -507,7 +684,7 @@ DEFAULT_ENVELOPES = [
             "Medical",
             "Gym",
             "Misc / Home Buffer",
-            # Parents support is optional Joint labelling; usually paid from Suhel/Seema
+            # Parents support is optional Joint labelling; usually paid from personal accounts
             "Parents",
         ],
     },
@@ -619,57 +796,8 @@ def migrate_envelope_category_maps() -> int:
 
 
 def seed_sample_investments() -> int:
-    """Seed a few sample holdings only when the portfolio is empty."""
-    if Investment.query.count() > 0:
-        return 0
-
-    retirement = Goal.query.filter_by(slug="retirement").first()
-    home = Goal.query.filter_by(slug="home-fund").first()
-    samples = [
-        {
-            "name": "Parag Parikh Flexi Cap",
-            "asset_type": "mutual_fund",
-            "invested_amount": Decimal("250000"),
-            "current_value": Decimal("312000"),
-            "monthly_sip": Decimal("15000"),
-            "owner": "joint",
-            "goal_id": retirement.id if retirement else None,
-            "sort_order": 1,
-        },
-        {
-            "name": "Nifty 50 Index Fund",
-            "asset_type": "sip",
-            "invested_amount": Decimal("180000"),
-            "current_value": Decimal("205000"),
-            "monthly_sip": Decimal("10000"),
-            "owner": "self",
-            "goal_id": home.id if home else None,
-            "sort_order": 2,
-        },
-        {
-            "name": "EPF",
-            "asset_type": "epf",
-            "invested_amount": Decimal("420000"),
-            "current_value": Decimal("455000"),
-            "monthly_sip": Decimal("0"),
-            "owner": "self",
-            "goal_id": retirement.id if retirement else None,
-            "sort_order": 3,
-        },
-        {
-            "name": "Bank FD — SBI",
-            "asset_type": "fd",
-            "invested_amount": Decimal("100000"),
-            "current_value": Decimal("106500"),
-            "monthly_sip": Decimal("0"),
-            "owner": "joint",
-            "goal_id": None,
-            "sort_order": 4,
-        },
-    ]
-    for item in samples:
-        db.session.add(Investment(**item, is_active=True))
-    return len(samples)
+    """No demo holdings — portfolio starts empty; user adds real investments."""
+    return 0
 
 
 def migrate_emergency_to_virtual_tags() -> int:

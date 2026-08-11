@@ -76,10 +76,9 @@ def _form_context():
         .order_by(Investment.sort_order, Investment.name)
         .all()
     )
-    joint = next(
-        (a for a in accounts if a.account_type == "joint" or a.name == "Joint Account"),
-        None,
-    )
+    from services import envelope_service, profile_service
+
+    spend_account = envelope_service.resolve_envelope_cash_account()
     my_account = next(
         (
             a
@@ -98,9 +97,10 @@ def _form_context():
         "payment_modes": Transaction.PAYMENT_MODES,
         "paid_by_choices": Transaction.PAID_BY_CHOICES,
         "need_want_choices": Transaction.NEED_WANT_CHOICES,
-        "default_joint_id": joint.id if joint else "",
+        "default_joint_id": spend_account.id if spend_account else "",
         "default_from_id": my_account.id if my_account else "",
         "default_essentials_id": essentials.id if essentials else "",
+        "is_couple_mode": profile_service.is_couple_mode(),
     }
 
 

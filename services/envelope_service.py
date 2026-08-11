@@ -195,12 +195,9 @@ def get_envelopes_overview(
     envelopes = list_envelopes(active_only=True)
     env_ids = [e.id for e in envelopes]
     total = sum((Decimal(e.current_balance or 0) for e in envelopes), Decimal("0"))
-    joint = (
-        Account.query.filter_by(name="Joint Account", is_active=True).first()
-        or Account.query.filter_by(owner="joint", is_active=True).first()
-    )
+    joint = resolve_envelope_cash_account()
     joint_balance = Decimal(joint.current_balance or 0) if joint else Decimal("0")
-    difference = joint_balance - total  # +ve = cash in Joint not labelled yet
+    difference = joint_balance - total  # +ve = cash not labelled yet
 
     # Per-envelope monthly stats from ledger entries
     stats: dict[int, dict[str, Decimal]] = {
@@ -397,10 +394,48 @@ def default_essentials_split(amount: Decimal) -> list[tuple[int, Decimal]]:
     return [(env.id, amount)]
 
 
+def resolve_envelope_cash_account() -> Account | None:
+    """Account whose cash envelopes label — Joint (couple) or Expenses (solo)."""
+    from services import profile_service
+
+    if profile_service.is_couple_mode():
+        return (
+            Account.query.filter_by(name="Joint Account", is_active=True).first()
+            or Account.query.filter_by(account_type="joint", is_active=True).first()
+            or Account.query.filter_by(owner="joint", is_active=True).first()
+        )
+
+    # Solo: "{Name} Expenses"
+    expenses = (
+        Account.query.filter(
+            Account.owner == "self",
+            Account.is_active.is_(True),
+        )
+        .order_by(Account.sort_order, Account.id)
+        .all()
+    )
+    for acc in expenses:
+        if "expense" in (acc.name or "").lower():
+            return acc
+    return None
+
+
 def is_joint_account(account: Account | None) -> bool:
+    """True if envelopes apply to spends/transfers for this account (Joint or solo Expenses)."""
     if not account:
         return False
-    return (account.owner or "").lower() == "joint" or account.name == "Joint Account"
+    if (account.owner or "").lower() == "joint" or account.account_type == "joint":
+        return True
+    if account.name == "Joint Account":
+        return True
+    from services import profile_service
+
+    if not profile_service.is_couple_mode():
+        return (
+            (account.owner or "").lower() == "self"
+            and "expense" in (account.name or "").lower()
+        )
+    return False
 
 
 def validate_splits_against_total(

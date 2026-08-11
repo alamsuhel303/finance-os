@@ -35,13 +35,13 @@ def index():
     sip = investment_service.get_sip_month_status(year, month)
     epf = investment_service.get_epf_month_status(year, month)
     snap = NetWorthSnapshot.query.filter_by(snapshot_date=this_month).first()
+    funding_ui = joint_funding_service.funding_ui()
 
     steps = [
         {
             "key": "income",
-            "n": 1,
             "title": "Post income",
-            "blurb": "Credit Suhel / Seema salary templates",
+            "blurb": "Credit salary templates",
             "detail": _income_detail(income),
             "amount": _income_amount(income),
             "status": _income_status(income),
@@ -49,9 +49,8 @@ def index():
         },
         {
             "key": "joint",
-            "n": 2,
-            "title": "Fund Joint",
-            "blurb": "Move household cash + label envelopes",
+            "title": funding_ui["title"],
+            "blurb": funding_ui["blurb"],
             "detail": _joint_detail(joint),
             "amount": _joint_amount(joint),
             "status": _joint_status(joint),
@@ -59,7 +58,6 @@ def index():
         },
         {
             "key": "sips",
-            "n": 3,
             "title": "Post SIPs",
             "blurb": "Cash SIP / fund contributions from bank",
             "detail": _sip_detail(sip),
@@ -69,7 +67,6 @@ def index():
         },
         {
             "key": "epf",
-            "n": 4,
             "title": "Post EPF",
             "blurb": "Salary deduction — no bank debit",
             "detail": _epf_detail(epf),
@@ -79,7 +76,6 @@ def index():
         },
         {
             "key": "snapshot",
-            "n": 5,
             "title": "Net worth snapshot",
             "blurb": "Lock the month for growth charts",
             "detail": _snapshot_detail(snap, this_month),
@@ -99,6 +95,8 @@ def index():
             ),
         },
     ]
+    for i, step in enumerate(steps, start=1):
+        step["n"] = i
 
     done = sum(1 for s in steps if s["status"] == "done")
     ready = sum(1 for s in steps if s["status"] == "ready")
@@ -137,7 +135,7 @@ def _income_amount(income: dict) -> str | None:
 
 def _income_detail(income: dict) -> str:
     if income["plan_count"] == 0:
-        return "Add Suhel / Seema salary templates in Settings first."
+        return "Add salary templates in Settings first."
     if income["ready_count"] > 0:
         parts = [
             f"{row['template'].name} {_fmt(row['amount'])}"
@@ -199,8 +197,9 @@ def _joint_amount(joint: dict) -> str | None:
 
 
 def _joint_detail(joint: dict) -> str:
+    ui = joint.get("ui") or joint_funding_service.funding_ui()
     if not joint["plan_configured"]:
-        return "Set Suhel + Seema amounts and envelope plan in Settings."
+        return ui["setup_detail"]
     if joint["ready_count"] > 0:
         parts = [
             f"{row['label']} {_fmt(row['amount'])}"
@@ -222,6 +221,7 @@ def _joint_detail(joint: dict) -> str:
 
 
 def _joint_actions(joint: dict) -> list[dict]:
+    ui = joint.get("ui") or joint_funding_service.funding_ui()
     if not joint["plan_configured"]:
         return [
             {
@@ -234,7 +234,7 @@ def _joint_actions(joint: dict) -> list[dict]:
     if joint["ready_count"] > 0:
         actions.append(
             {
-                "label": "Post Fund Joint",
+                "label": f"Post {ui['title']}",
                 "url": "settings.post_joint_funding",
                 "method": "POST",
             }
