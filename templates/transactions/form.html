@@ -112,7 +112,7 @@
         </div>
       </div>
 
-      <div class="col-md-6 expense-fields {% if form_data.get('transaction_type', 'expense') != 'expense' %}hidden{% endif %}" id="expenseFields">
+      <div class="col-md-6 expense-fields {% if form_data.get('transaction_type', 'expense') not in ['expense', 'refund'] %}hidden{% endif %}" id="expenseFields">
         <label class="form-label" for="envelope_id">Envelope (optional)</label>
         <select class="form-select" id="envelope_id" name="envelope_id">
           <option value="">Auto from category</option>

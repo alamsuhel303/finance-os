@@ -22,6 +22,8 @@ ADDITIVE_COLUMNS = {
         ("envelope_id", "INTEGER REFERENCES envelopes(id)"),
         ("investment_id", "INTEGER REFERENCES investments(id)"),
         ("skip_cash_impact", "BOOLEAN DEFAULT 0 NOT NULL"),
+        ("source", "VARCHAR(20) DEFAULT 'web' NOT NULL"),
+        ("telegram_message_id", "INTEGER"),
     ],
     "investments": [
         ("sip_day", "INTEGER"),

@@ -33,6 +33,7 @@ class Transaction(db.Model):
         "other",
     )
     PAID_BY_CHOICES = ("self", "wife", "joint")
+    SOURCES = ("web", "telegram", "import")
 
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, nullable=False, index=True, default=date.today)
@@ -74,6 +75,11 @@ class Transaction(db.Model):
     )
     # False for salary-deducted contributions (EPF) — no bank account debit
     skip_cash_impact = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Origin channel — web UI, Telegram bot, or Excel import
+    source = db.Column(db.String(20), nullable=False, default="web", index=True)
+    # Soft link to inbox row (no FK — avoids circular create with telegram_messages)
+    telegram_message_id = db.Column(db.Integer, nullable=True, index=True)
 
     created_at = db.Column(db.DateTime, nullable=False, default=_utcnow)
     updated_at = db.Column(

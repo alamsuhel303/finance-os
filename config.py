@@ -16,6 +16,10 @@ def _resolve_database_uri() -> str:
     default_path = BASE_DIR / "database" / "finance.db"
     raw = os.getenv("DATABASE_URL", f"sqlite:///{default_path}")
 
+    # In-memory / special SQLite URIs must not be path-joined
+    if raw in ("sqlite://", "sqlite:///:memory:") or raw.startswith("sqlite:///:memory:"):
+        return "sqlite:///:memory:"
+
     if raw.startswith("sqlite:///"):
         path_part = raw.removeprefix("sqlite:///")
         # Absolute filesystem path already (sqlite:////abs or sqlite:///C:/...)
@@ -46,6 +50,27 @@ class Config:
     # Dashboard nudge when newest backup is older than this many days
     BACKUP_MAX_AGE_DAYS = int(os.getenv("BACKUP_MAX_AGE_DAYS", "7"))
     IMPORT_STAGING_DIR = BASE_DIR / "database" / ".import_staging"
+
+    # Telegram bot (separate worker process)
+    TELEGRAM_ENABLED = os.getenv("TELEGRAM_ENABLED", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    TELEGRAM_POLL_TIMEOUT = int(os.getenv("TELEGRAM_POLL_TIMEOUT", "30"))
+    TELEGRAM_TIMEZONE = os.getenv("TELEGRAM_TIMEZONE", "Asia/Kolkata")
+    TELEGRAM_NOTIFY_STARTUP = os.getenv("TELEGRAM_NOTIFY_STARTUP", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    TELEGRAM_PENDING_TTL_MINUTES = int(os.getenv("TELEGRAM_PENDING_TTL_MINUTES", "60"))
+    TELEGRAM_LINK_CODE_TTL_MINUTES = int(
+        os.getenv("TELEGRAM_LINK_CODE_TTL_MINUTES", "30")
+    )
 
 
 class DevelopmentConfig(Config):

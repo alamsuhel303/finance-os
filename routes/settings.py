@@ -20,7 +20,9 @@ from services import (
     category_service,
     envelope_service,
     joint_funding_service,
+    profile_service,
     recurring_income_service,
+    telegram_service,
 )
 from services.backup_service import BackupError
 from services.category_service import (
@@ -32,6 +34,7 @@ from services.category_service import (
 )
 from services.joint_funding_service import JointFundingValidationError
 from services.recurring_income_service import RecurringIncomeValidationError
+from services.telegram_service import TelegramServiceError
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
 
@@ -68,6 +71,9 @@ def index():
     templates = recurring_income_service.list_templates(active_only=False)
     joint_status = joint_funding_service.get_month_status()
     joint_plan = joint_funding_service.get_plan()
+    telegram_users = telegram_service.list_linked_users()
+    telegram_accounts = telegram_service.spending_accounts()
+    labels = profile_service.get_owner_labels()
 
     return render_template(
         "settings/index.html",
@@ -78,6 +84,12 @@ def index():
         joint_status=joint_status,
         joint_plan=joint_plan,
         funding_ui=joint_funding_service.funding_ui(),
+        telegram_users=telegram_users,
+        telegram_accounts=telegram_accounts,
+        telegram_enabled=current_app.config.get("TELEGRAM_ENABLED"),
+        telegram_token_set=bool(current_app.config.get("TELEGRAM_BOT_TOKEN")),
+        owner_labels=labels,
+        is_couple=profile_service.is_couple_mode(),
         config_backup_days=current_app.config.get("BACKUP_MAX_AGE_DAYS", 7),
         currency=current_app.config["CURRENCY_SYMBOL"],
         page_title="Settings",
@@ -460,3 +472,43 @@ def category_delete(category_id: int):
     except CategoryValidationError as exc:
         flash(str(exc), "danger")
     return redirect(url_for("settings.categories_index"))
+
+
+@settings_bp.route("/telegram/link-code", methods=["POST"])
+def telegram_link_code():
+    owner = (request.form.get("owner") or "self").strip().lower()
+    try:
+        row = telegram_service.generate_link_code(owner)
+        labels = profile_service.get_owner_labels()
+        who = labels.get(owner, owner)
+        flash(
+            f"Link code for {who}: {row.code} — expires in "
+            f"{current_app.config.get('TELEGRAM_LINK_CODE_TTL_MINUTES', 30)} minutes. "
+            f"In Telegram send: /link {row.code}",
+            "success",
+        )
+    except TelegramServiceError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/telegram/<int:telegram_user_id>/unlink", methods=["POST"])
+def telegram_unlink(telegram_user_id: int):
+    try:
+        telegram_service.unlink_user(telegram_user_id)
+        flash("Telegram account unlinked.", "success")
+    except TelegramServiceError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("settings.index"))
+
+
+@settings_bp.route("/telegram/<int:telegram_user_id>/default-account", methods=["POST"])
+def telegram_default_account(telegram_user_id: int):
+    raw = request.form.get("default_account_id") or ""
+    account_id = int(raw) if str(raw).isdigit() else None
+    try:
+        telegram_service.set_default_account(telegram_user_id, account_id)
+        flash("Default Telegram spend account updated.", "success")
+    except TelegramServiceError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("settings.index"))

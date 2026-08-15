@@ -800,6 +800,70 @@ def seed_sample_investments() -> int:
     return 0
 
 
+# alias (lowercase) → category name as seeded in DEFAULT_CATEGORIES
+DEFAULT_TELEGRAM_ALIASES: list[tuple[str, str]] = [
+    ("dinner", "Dining Out"),
+    ("lunch", "Dining Out"),
+    ("breakfast", "Dining Out"),
+    ("restaurant", "Dining Out"),
+    ("zomato", "Dining Out"),
+    ("swiggy", "Dining Out"),
+    ("dining", "Dining Out"),
+    ("cafe", "Dining Out"),
+    ("groceries", "Groceries"),
+    ("grocery", "Groceries"),
+    ("vegetables", "Fruits & Vegetables"),
+    ("fruits", "Fruits & Vegetables"),
+    ("petrol", "Fuel & Bike"),
+    ("fuel", "Fuel & Bike"),
+    ("diesel", "Fuel & Bike"),
+    ("bike", "Fuel & Bike"),
+    ("rent", "Rent"),
+    ("electricity", "Utilities"),
+    ("utilities", "Utilities"),
+    ("wifi", "Utilities"),
+    ("internet", "Utilities"),
+    ("movie", "Movies & Entertainment"),
+    ("movies", "Movies & Entertainment"),
+    ("entertainment", "Movies & Entertainment"),
+    ("shopping", "Shopping"),
+    ("amazon", "Shopping"),
+    ("flipkart", "Shopping"),
+    ("headphones", "Shopping"),
+    ("electronics", "Shopping"),
+    ("travel", "Travel"),
+    ("flight", "Flights"),
+    ("flights", "Flights"),
+    ("hotel", "Hotels"),
+    ("cab", "Travel Cab / Transport"),
+    ("uber", "Travel Cab / Transport"),
+    ("ola", "Travel Cab / Transport"),
+    ("health", "Medical"),
+    ("gym", "Gym"),
+    ("medicine", "Medical"),
+    ("protein", "Protein & Supplements"),
+    ("misc", "Misc / Home Buffer"),
+    ("buffer", "Misc / Home Buffer"),
+]
+
+
+def seed_telegram_aliases() -> int:
+    """Seed category keyword aliases for the Telegram parser (idempotent)."""
+    from models import Category, TelegramCategoryAlias
+
+    created = 0
+    for alias, cat_name in DEFAULT_TELEGRAM_ALIASES:
+        key = alias.strip().lower()
+        if TelegramCategoryAlias.query.filter_by(alias=key).first():
+            continue
+        cat = Category.query.filter_by(name=cat_name, parent_id=None).first()
+        if not cat:
+            continue
+        db.session.add(TelegramCategoryAlias(alias=key, category_id=cat.id))
+        created += 1
+    return created
+
+
 def migrate_emergency_to_virtual_tags() -> int:
     """
     One-time: Emergency Fund is tagged cash/investments, not a bank account.
@@ -842,6 +906,7 @@ def seed_database() -> None:
     if goals_created:
         db.session.flush()
     investments_created = seed_sample_investments()
+    aliases_created = seed_telegram_aliases()
 
     if (
         renamed
@@ -856,12 +921,13 @@ def seed_database() -> None:
         or budgets_created
         or goals_created
         or investments_created
+        or aliases_created
     ):
         db.session.commit()
         logger.info(
             "Seeded renamed=%s cats_renamed=%s emergency_migrated=%s accounts=%s "
             "categories=%s envelopes=%s envelope_remaps=%s parents_excluded=%s "
-            "budgets_stripped=%s budgets=%s goals=%s investments=%s",
+            "budgets_stripped=%s budgets=%s goals=%s investments=%s aliases=%s",
             renamed,
             cats_renamed,
             emergency_migrated,
@@ -874,6 +940,7 @@ def seed_database() -> None:
             budgets_created,
             goals_created,
             investments_created,
+            aliases_created,
         )
     else:
         logger.debug("Seed skipped — defaults already present")

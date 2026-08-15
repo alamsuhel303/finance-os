@@ -46,10 +46,91 @@ Open: [http://127.0.0.1:5001](http://127.0.0.1:5001)
 > **Note:** Port `5000` is used by macOS AirPlay Receiver and often returns browser **403**. Finance OS defaults to **5001**.
 
 The SQLite database is created automatically at `database/finance.db`.  
-Defaults (accounts, categories, envelopes, budgets, goals, sample investments) seed on first launch.
+Defaults (accounts, categories, envelopes, budgets, goal shells) seed on first launch. Goal targets and investments start empty — fill them in the UI.
 
 For day-to-day how-to, see **[USAGE.md](USAGE.md)**.  
 Feature overview stays in this README — no separate features doc.
+
+### Tests
+
+```bash
+source .venv/bin/activate
+pytest -q
+```
+
+---
+
+## Telegram bot
+
+Enter expenses from phone/Mac Telegram using the **same** `transaction_service` as the web UI.
+
+### 1. Create a bot
+
+1. Open Telegram → talk to [@BotFather](https://t.me/BotFather)
+2. `/newbot` → copy the token
+3. Put it in `.env` (never commit the real token):
+
+```bash
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=123456:ABC...your_token
+TELEGRAM_TIMEZONE=Asia/Kolkata
+```
+
+### 2. Link household members
+
+1. Start the web app: `python app.py`
+2. **Settings → Telegram** → generate a link code for Person 1 / Person 2
+3. In Telegram, message your bot: `/link ABC123`
+
+Each Telegram account maps to `self` or `wife` (Person 1 / Person 2). The same Telegram login on phone + Mac is one user ID (multi-device works automatically).
+
+### 3. Run the worker (second terminal)
+
+```bash
+source .venv/bin/activate
+python -m telegram_bot
+# or: python scripts/run_telegram_bot.py
+```
+
+Keep **both** processes running for live use:
+
+| Terminal | Command |
+|----------|---------|
+| 1 | `python app.py` |
+| 2 | `python -m telegram_bot` |
+
+### Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/add 450 dinner` | Draft expense → Confirm |
+| `/today` | Today's expenses |
+| `/recent` | Latest expenses |
+| `/month` | Monthly summary |
+| `/budget` | Budget vs spent |
+| `/envelopes` | Envelope balances |
+| `/undo` | Undo last Telegram expense |
+| `/status` | Bot + DB health |
+| `/link CODE` | Authorize this Telegram account |
+| `/unlink` | Remove authorization |
+| `/help` | Help |
+
+Plain text also works: `850 dinner`, `Spent 850 at Zomato for dinner`.
+
+Every expense shows a confirmation card (**Confirm / Edit / Cancel**) before it is written to the ledger.
+
+### Offline / restart
+
+If the laptop is off, Telegram keeps undelivered bot updates for a **limited time** (typically up to ~24 hours). When the worker starts again it long-polls and processes them in order, with **idempotency** on `update_id` so duplicates are not double-posted.
+
+SQLite (`telegram_messages`) is the audit trail; Telegram is only a temporary transport.
+
+### Security
+
+- Unknown Telegram users only get an “not authorized” message
+- Link codes expire and are single-use
+- Callback buttons verify the Telegram user owns the pending draft
+- Bot token stays in `.env` / environment only
 
 ---
 
@@ -63,6 +144,8 @@ finance-os/
 ├── models/                # SQLAlchemy models
 ├── routes/                # Flask blueprints
 ├── services/              # Business logic (no HTTP concerns)
+├── telegram_bot/          # Long-polling Telegram worker
+├── tests/                 # pytest
 ├── utils/                 # Helpers, seed data, schema upgrades
 ├── templates/             # Jinja templates
 ├── static/                # CSS / JS
@@ -70,6 +153,7 @@ finance-os/
 └── backups/               # SQLite snapshots from Settings
 ```
 
+Web UI and Telegram both call `services/transaction_service.py` (and budget/report services). No duplicate ledger logic.
 ---
 
 ## What’s Built
@@ -142,6 +226,13 @@ Optional `.env` (see `.env.example`):
 | `DATABASE_URL` | `sqlite:///database/finance.db` | DB path |
 | `CURRENCY_SYMBOL` | `₹` | Display |
 | `CURRENCY_CODE` | `INR` | Display |
+| `TELEGRAM_ENABLED` | `false` | Prefer `true` when running the bot |
+| `TELEGRAM_BOT_TOKEN` | _(empty)_ | From BotFather — secret |
+| `TELEGRAM_POLL_TIMEOUT` | `30` | Long-poll seconds |
+| `TELEGRAM_TIMEZONE` | `Asia/Kolkata` | Today / yesterday for expenses |
+| `TELEGRAM_NOTIFY_STARTUP` | `false` | Do not spam chats on restart |
+| `TELEGRAM_PENDING_TTL_MINUTES` | `60` | Confirm draft expiry |
+| `TELEGRAM_LINK_CODE_TTL_MINUTES` | `30` | Settings link-code expiry |
 
 ---
 
