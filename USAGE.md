@@ -30,6 +30,19 @@ Money moves with **transactions**. Envelopes do not move bank cash by themselves
 5. **Settings → Categories** — add any missing labels.
 6. **Settings → Create Backup**, then copy `backups/` off this Mac.
 7. Optional: **Insurance**, **Investments**, **Goals**, **Budget** limits for the current month.
+8. Optional: **Settings → Telegram** — link phone/Mac accounts, then run `python -m telegram_bot` in a second terminal (see [README.md](README.md#telegram-bot)).
+
+---
+
+## Telegram (quick)
+
+1. Create a bot with BotFather; set `TELEGRAM_BOT_TOKEN` in `.env`.
+2. Web **Settings → Telegram** → generate link code for you / partner.
+3. In Telegram: `/link CODE`
+4. Second terminal: `python -m telegram_bot`
+5. Send `/add 450 dinner` → Confirm.
+
+Unknown Telegram users are rejected. Pending bot updates while the Mac is off are only kept by Telegram for a limited time (~24h).
 
 ---
 
@@ -85,7 +98,7 @@ This does **not** invent transactions. Prefer this over editing current balance 
 | Income | Increases account |
 | Transfer | Moves cash between accounts; Self/Wife → Joint can split into envelopes |
 | Investment | Outflow from cash + updates linked holding when set |
-| Refund | Increases account |
+| Refund | Increases account; restores the category’s envelope (Joint) and reduces budget spent |
 
 ### Excel import (preview + duplicates)
 

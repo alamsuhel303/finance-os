@@ -18,7 +18,9 @@ database/*.db
 database/*.db-journal
 database/*.db-wal
 database/*.db-shm
+database/*.db.backup
 database/.import_staging/
+:memory:
 
 # Backups may contain personal data
 backups/*.db

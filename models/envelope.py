@@ -66,6 +66,7 @@ class EnvelopeEntry(db.Model):
     ENTRY_TYPES = (
         "allocation",
         "spend",
+        "refund",
         "adjustment",
         "reallocation_in",
         "reallocation_out",
@@ -101,4 +102,4 @@ class EnvelopeEntry(db.Model):
         value = Decimal(self.amount or 0)
         if self.entry_type in ("spend", "reallocation_out"):
             return -value
-        return value  # allocation / adjustment / reallocation_in
+        return value  # allocation / refund / adjustment / reallocation_in

@@ -12,6 +12,13 @@ from models.joint_funding import JointFundingPlan, JointFundingSplit
 from models.liability import Liability
 from models.net_worth import NetWorthSnapshot
 from models.recurring_income import RecurringIncome
+from models.telegram import (
+    TelegramCategoryAlias,
+    TelegramLinkCode,
+    TelegramMessage,
+    TelegramPendingTransaction,
+    TelegramUser,
+)
 from models.transaction import Transaction
 
 __all__ = [
@@ -29,5 +36,10 @@ __all__ = [
     "Liability",
     "NetWorthSnapshot",
     "RecurringIncome",
+    "TelegramCategoryAlias",
+    "TelegramLinkCode",
+    "TelegramMessage",
+    "TelegramPendingTransaction",
+    "TelegramUser",
     "Transaction",
 ]

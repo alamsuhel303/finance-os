@@ -126,6 +126,9 @@ def get_envelope_ledger(
         if entry.entry_type == "spend":
             spent += amount
             signed = -amount
+        elif entry.entry_type == "refund":
+            spent -= amount
+            signed = amount
         else:
             allocated += amount
             signed = amount
@@ -226,11 +229,14 @@ def get_envelopes_overview(
             eff = _entry_effective_date(entry, txn_date)
             etype = entry.entry_type
             is_spend = etype == "spend"
+            is_refund = etype == "refund"
             is_realloc_out = etype == "reallocation_out"
             is_credit = etype in ("allocation", "adjustment", "reallocation_in")
 
             if is_spend:
                 bucket["lifetime_spent"] += amount
+            elif is_refund:
+                bucket["lifetime_spent"] -= amount
             elif is_credit:
                 bucket["lifetime_allocated"] += amount
             # reallocation_out: lifetime nets via balance; not "spent"
@@ -238,11 +244,13 @@ def get_envelopes_overview(
             if eff < start:
                 if is_spend or is_realloc_out:
                     bucket["carry_forward"] -= amount
-                elif is_credit:
+                elif is_refund or is_credit:
                     bucket["carry_forward"] += amount
             elif start <= eff <= end:
                 if is_spend:
                     bucket["spent"] += amount
+                elif is_refund:
+                    bucket["spent"] -= amount
                 elif is_credit:
                     bucket["allocated"] += amount
                 elif is_realloc_out:
@@ -471,6 +479,15 @@ def apply_envelope_entries_for_transaction(
     elif txn.transaction_type == "expense" and expense_envelope:
         _debit(expense_envelope.id, Decimal(txn.amount or 0), txn, entry_type="spend")
         txn.envelope_id = expense_envelope.id
+    elif txn.transaction_type == "refund" and expense_envelope:
+        # Restore the pot that the original expense drained
+        _credit(
+            expense_envelope.id,
+            Decimal(txn.amount or 0),
+            txn,
+            entry_type="refund",
+        )
+        txn.envelope_id = expense_envelope.id
 
 
 def expense_envelope_warning(
@@ -536,6 +553,40 @@ def reverse_envelope_entries_for_transaction(txn: Transaction) -> None:
         _apply_entry_to_balance(entry, reverse=True)
         db.session.delete(entry)
     txn.envelope_id = None
+
+
+def backfill_missing_refund_envelope_entries() -> int:
+    """
+    Credit pots for past refunds that updated cash but never wrote envelope lines.
+    Safe to re-run: skips refunds that already have envelope entries.
+    """
+    from models import Transaction
+
+    fixed = 0
+    refunds = (
+        Transaction.query.filter_by(transaction_type="refund")
+        .order_by(Transaction.id.asc())
+        .all()
+    )
+    for txn in refunds:
+        if txn.envelope_entries.count() > 0:
+            continue
+        account = db.session.get(Account, txn.account_id)
+        if not is_joint_account(account):
+            continue
+        expense_env = resolve_envelope_for_expense(
+            envelope_id=txn.envelope_id,
+            category_id=txn.category_id,
+        )
+        if not expense_env:
+            expense_env = get_essentials_envelope()
+        if not expense_env:
+            continue
+        apply_envelope_entries_for_transaction(txn, expense_envelope=expense_env)
+        fixed += 1
+    if fixed:
+        db.session.commit()
+    return fixed
 
 
 def _credit(

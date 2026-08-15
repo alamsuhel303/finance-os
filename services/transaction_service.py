@@ -69,22 +69,30 @@ def _apply_investment_installment(txn: Transaction, *, reverse: bool = False) ->
 
 
 def _expense_warnings(
-    data: Any, expense_env, amount
+    data: Any, expense_env, amount, *, txn_type: str | None = None
 ) -> str | None:
-    return envelope_service.merge_warnings(
+    kind = (txn_type or data.get("transaction_type") or "expense").strip().lower()
+    parts = [
         envelope_service.category_envelope_mismatch_warning(
             category_id=_optional_int(data.get("category_id")),
             envelope_id=_optional_int(data.get("envelope_id")),
-        ),
-        envelope_service.expense_envelope_warning(expense_env, amount),
-    )
+        )
+    ]
+    if kind == "expense":
+        parts.append(envelope_service.expense_envelope_warning(expense_env, amount))
+    return envelope_service.merge_warnings(*parts)
 
 
 def create_transaction(data: Any) -> tuple[Transaction, str | None]:
     try:
         splits, expense_env = _prepare_envelope_side_effects(data)
         amount = parse_amount(data.get("amount"))
-        warning = _expense_warnings(data, expense_env, amount)
+        warning = _expense_warnings(
+            data,
+            expense_env,
+            amount,
+            txn_type=(data.get("transaction_type") or "expense"),
+        )
         txn = _build_transaction(data)
         _ensure_sufficient_funds(txn)
         db.session.add(txn)
@@ -108,7 +116,12 @@ def update_transaction(txn: Transaction, data: Any) -> tuple[Transaction, str | 
         amount = parse_amount(data.get("amount"))
         # After reverse, balance is restored — warn against that restored balance
         envelope_service.reverse_envelope_entries_for_transaction(txn)
-        warning = _expense_warnings(data, expense_env, amount)
+        warning = _expense_warnings(
+            data,
+            expense_env,
+            amount,
+            txn_type=(data.get("transaction_type") or "expense"),
+        )
         apply_transaction_to_balances(txn, reverse=True)
         _populate_transaction(txn, data)
         _ensure_sufficient_funds(txn)
@@ -175,7 +188,7 @@ def _prepare_envelope_side_effects(data: Any):
 
         if splits:
             envelope_service.validate_splits_against_total(splits, amount)
-    elif txn_type == "expense":
+    elif txn_type in ("expense", "refund"):
         from_acc = db.session.get(Account, _optional_int(data.get("account_id")))
         # Envelopes label Joint cash only. Personal account spends hit Budget, not pots.
         if envelope_service.is_joint_account(from_acc):
@@ -183,8 +196,8 @@ def _prepare_envelope_side_effects(data: Any):
                 envelope_id=_optional_int(data.get("envelope_id")),
                 category_id=_optional_int(data.get("category_id")),
             )
-            # Joint cash leaving the bank must reduce a pot label too,
-            # otherwise Joint drops while envelopes stay high → "over-allocated".
+            # Joint cash leaving/returning must move a pot label too,
+            # otherwise Joint and envelopes drift apart.
             if not expense_env:
                 expense_env = envelope_service.get_essentials_envelope()
 
@@ -388,7 +401,7 @@ def _populate_transaction(txn: Transaction, data: Any) -> None:
     txn.payment_mode = payment_mode
     txn.need_want = need_want
     txn.notes = (data.get("notes") or "").strip() or None
-    if txn_type != "expense":
+    if txn_type not in ("expense", "refund"):
         txn.envelope_id = None
 
     # Parents / family support sits outside the ~₹1.5L Essentials household budget
@@ -399,12 +412,12 @@ def _populate_transaction(txn: Transaction, data: Any) -> None:
             "on",
             "yes",
         )
-    elif txn_type == "expense" and category:
+    elif txn_type in ("expense", "refund") and category:
         from utils.seed import BUDGET_EXCLUDED_CATEGORY_SLUGS
 
         slug = (category.slug or "").strip().lower()
         txn.is_excluded_from_budget = slug in BUDGET_EXCLUDED_CATEGORY_SLUGS
-    elif txn_type != "expense":
+    else:
         txn.is_excluded_from_budget = False
 
     investment_id = _optional_int(data.get("investment_id"))
@@ -422,6 +435,13 @@ def _populate_transaction(txn: Transaction, data: Any) -> None:
         "on",
         "yes",
     )
+
+    source = (data.get("source") or "web").strip().lower()
+    if source not in Transaction.SOURCES:
+        source = "web"
+    txn.source = source
+    tg_msg_id = _optional_int(data.get("telegram_message_id"))
+    txn.telegram_message_id = tg_msg_id if source == "telegram" else None
 
 
 def _optional_int(value) -> Optional[int]:

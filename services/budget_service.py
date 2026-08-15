@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 
 from extensions import db
 from models import Budget, Category, Transaction
@@ -23,6 +23,12 @@ STATUS_OK = "ok"  # < 75%
 STATUS_WATCH = "watch"  # 75–99%
 STATUS_OVER = "over"  # >= 100%
 STATUS_NONE = "none"  # no budget set
+
+# Signed contribution to budget "spent": expenses +, refunds −
+_BUDGET_SIGNED_AMOUNT = case(
+    (Transaction.transaction_type == "refund", -Transaction.amount),
+    else_=Transaction.amount,
+)
 
 # Examples that help pick a monthly household limit (match by slug or name key).
 CATEGORY_BUDGET_HINTS: dict[str, str] = {
@@ -206,10 +212,10 @@ def get_budget_overview(year: int | None = None, month: int | None = None) -> di
     actual_rows = (
         db.session.query(
             Transaction.category_id,
-            func.coalesce(func.sum(Transaction.amount), 0).label("total"),
+            func.coalesce(func.sum(_BUDGET_SIGNED_AMOUNT), 0).label("total"),
         )
         .filter(
-            Transaction.transaction_type == "expense",
+            Transaction.transaction_type.in_(("expense", "refund")),
             Transaction.is_excluded_from_budget.is_(False),
             Transaction.date >= start,
             Transaction.date <= end,
@@ -249,11 +255,11 @@ def get_budget_overview(year: int | None = None, month: int | None = None) -> di
             }
         )
 
-    # Uncategorized expenses
+    # Uncategorized expenses (net of refunds)
     uncategorized = (
-        db.session.query(func.coalesce(func.sum(Transaction.amount), 0))
+        db.session.query(func.coalesce(func.sum(_BUDGET_SIGNED_AMOUNT), 0))
         .filter(
-            Transaction.transaction_type == "expense",
+            Transaction.transaction_type.in_(("expense", "refund")),
             Transaction.is_excluded_from_budget.is_(False),
             Transaction.date >= start,
             Transaction.date <= end,
@@ -555,7 +561,7 @@ def get_category_month_activity(
     month: int | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
-    """Expense transactions for one household budget category in a month."""
+    """Expense + refund transactions for one household budget category in a month."""
     category = db.session.get(Category, category_id)
     if not category or category.category_type != "expense":
         return {"category": None, "rows": [], "totals": {}}
@@ -572,7 +578,7 @@ def get_category_month_activity(
     txns = (
         Transaction.query.filter(
             Transaction.category_id == category_id,
-            Transaction.transaction_type == "expense",
+            Transaction.transaction_type.in_(("expense", "refund")),
             Transaction.is_excluded_from_budget.is_(False),
             Transaction.date >= start,
             Transaction.date <= end,
@@ -583,7 +589,15 @@ def get_category_month_activity(
     )
     truncated = len(txns) > limit
     txns = txns[:limit]
-    total = sum((Decimal(t.amount or 0) for t in txns), Decimal("0"))
+    total = sum(
+        (
+            -Decimal(t.amount or 0)
+            if t.transaction_type == "refund"
+            else Decimal(t.amount or 0)
+            for t in txns
+        ),
+        Decimal("0"),
+    )
     if truncated:
         # Prefer overview actual (full month) for the headline number
         total = Decimal(row["actual"]) if row else total
@@ -610,7 +624,7 @@ def get_month_spent_activity(
     month: int | None = None,
     limit: int = 300,
 ) -> dict[str, Any]:
-    """All expenses that make up Budget Spent for the month."""
+    """All expenses and refunds that make up Budget Spent for the month."""
     today = date.today()
     year = year or today.year
     month = month or today.month
@@ -625,7 +639,7 @@ def get_month_spent_activity(
 
     txns = (
         Transaction.query.filter(
-            Transaction.transaction_type == "expense",
+            Transaction.transaction_type.in_(("expense", "refund")),
             Transaction.is_excluded_from_budget.is_(False),
             Transaction.date >= start,
             Transaction.date <= end,
@@ -641,7 +655,15 @@ def get_month_spent_activity(
     ]
     truncated = len(rows) > limit
     rows = rows[:limit]
-    listed = sum((Decimal(t.amount or 0) for t in rows), Decimal("0"))
+    listed = sum(
+        (
+            -Decimal(t.amount or 0)
+            if t.transaction_type == "refund"
+            else Decimal(t.amount or 0)
+            for t in rows
+        ),
+        Decimal("0"),
+    )
 
     return {
         "year": year,

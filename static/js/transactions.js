@@ -136,8 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function applyExpenseDefaults() {
     if (defaults.isEdit) return;
-    if (typeSelect?.value !== "expense") return;
-    // Expenses default to Joint (household spend)
+    const type = typeSelect?.value || "expense";
+    if (type !== "expense" && type !== "refund") return;
+    // Expenses/refunds default to Joint (household cash)
     if (accountSelect && defaults.jointId && !accountTouched) {
       accountSelect.value = String(defaults.jointId);
     }
@@ -160,7 +161,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function syncEnvelopeFromCategory({ force = false } = {}) {
-    if (!envelopeSelect || typeSelect?.value !== "expense") return;
+    const type = typeSelect?.value || "expense";
+    if (!envelopeSelect || (type !== "expense" && type !== "refund")) return;
     const defaultEnv = categoryDefaultEnvelopeId();
     if (force || !envelopeManual) {
       envelopeSelect.value = defaultEnv || "";
@@ -171,7 +173,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateEnvelopeMismatchHint() {
     if (!envelopeMismatchHint) return;
-    if (typeSelect?.value !== "expense") {
+    const type = typeSelect?.value || "expense";
+    if (type !== "expense" && type !== "refund") {
       envelopeMismatchHint.textContent = "";
       return;
     }
@@ -196,13 +199,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const type = typeSelect ? typeSelect.value : "expense";
     const isTransfer = type === "transfer";
     const isExpense = type === "expense";
+    const usesEnvelope = type === "expense" || type === "refund";
     const isIncome = type === "income";
     const isInvestment = type === "investment";
     const showCategory = type === "expense" || type === "refund" || type === "income";
     const showNeedWant = type === "expense" || type === "refund";
 
     transferFields.forEach((el) => el.classList.toggle("hidden", !isTransfer));
-    if (expenseFields) expenseFields.classList.toggle("hidden", !isExpense);
+    if (expenseFields) expenseFields.classList.toggle("hidden", !usesEnvelope);
     categoryFields.forEach((el) => el.classList.toggle("hidden", !showCategory));
     if (needWantFields) needWantFields.classList.toggle("hidden", !showNeedWant);
     if (paymentModeFields) paymentModeFields.classList.toggle("hidden", isIncome);
@@ -223,7 +227,9 @@ document.addEventListener("DOMContentLoaded", () => {
           ? "Credit Account"
           : isInvestment
             ? "Debit from"
-            : "Account";
+            : type === "refund"
+              ? "Credit Account"
+              : "Account";
     }
 
     if (categorySelect) {
@@ -236,7 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
       applyTransferDefaults();
       ensureDefaultEssentialsSplit();
     }
-    if (isExpense) {
+    if (usesEnvelope) {
       applyExpenseDefaults();
       syncEnvelopeFromCategory({ force: !defaults.isEdit });
     } else if (envelopeMismatchHint) {
