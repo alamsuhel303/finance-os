@@ -6,9 +6,20 @@
     <h1 class="page-title">Insurance</h1>
     <p class="page-subtitle">Cover, premiums, and renewals</p>
   </div>
-  <a href="{{ url_for('insurance.create') }}" class="btn btn-accent">
-    <i class="bi bi-plus-lg me-1"></i> Add Policy
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if premium_status and premium_status.ready_count %}
+      <form method="post" action="{{ url_for('insurance.post_premiums') }}">
+        <button type="submit" class="btn btn-accent"
+                onclick="return confirm('Post {{ premium_status.ready_count }} premium{{ 's' if premium_status.ready_count != 1 else '' }} for {{ premium_status.label }}?')">
+          <i class="bi bi-lightning-charge me-1"></i>
+          Post premiums ({{ currency }}{{ '%.0f'|format(premium_status.ready_total) }})
+        </button>
+      </form>
+    {% endif %}
+    <a href="{{ url_for('insurance.create') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Policy
+    </a>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -50,7 +61,7 @@
             <th>Type</th>
             <th>Cover</th>
             <th>Premium</th>
-            <th>Renewal</th>
+            <th>Due / Cover</th>
             <th></th>
           </tr>
         </thead>
@@ -63,6 +74,10 @@
                   {% if p.insurer %}{{ p.insurer }}{% endif %}
                   {% if p.policy_number %} · {{ p.policy_number }}{% endif %}
                   · {{ p.owner | capitalize }}
+                  {% if p.policy_type in ['term', 'life'] and p.premium_paying_term_years %}
+                    · PPT {{ p.premium_paying_term_years }}y
+                    {% if p.policy_term_years %}/ {{ p.policy_term_years }}y term{% endif %}
+                  {% endif %}
                 </div>
               </td>
               <td><span class="badge-type badge-transfer">{{ policy_labels.get(p.policy_type, p.policy_type) }}</span></td>
@@ -73,7 +88,7 @@
               </td>
               <td>
                 {% if p.next_renewal_date %}
-                  {{ p.next_renewal_date.strftime('%d %b %Y') }}
+                  <div>{{ p.next_renewal_date.strftime('%d %b %Y') }}</div>
                   {% if p.renewal_status == 'overdue' %}
                     <span class="badge-type badge-expense">Overdue</span>
                   {% elif p.renewal_status == 'due_soon' %}
@@ -81,6 +96,12 @@
                   {% endif %}
                 {% else %}
                   —
+                {% endif %}
+                {% if p.policy_type == 'health' and p.coverage_start_date and p.coverage_end_date %}
+                  <div class="stat-meta">
+                    Cover {{ p.coverage_start_date.strftime('%d %b %Y') }}
+                    → {{ p.coverage_end_date.strftime('%d %b %Y') }}
+                  </div>
                 {% endif %}
               </td>
               <td class="text-end text-nowrap">

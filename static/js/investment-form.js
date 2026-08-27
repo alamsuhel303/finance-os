@@ -10,7 +10,8 @@
     fd: "Fixed deposit value and optional schedule",
     stock: "Holdings value",
     rsu: "RSU value",
-    gold: "Gold holding value",
+    gold: "Enter grams — valued at live 22K ₹/gram",
+    foreign_stock: "Ticker + shares — valued in ₹ from live market price",
     other: "Investment value and optional schedule",
   };
 

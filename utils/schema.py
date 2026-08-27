@@ -34,6 +34,13 @@ ADDITIVE_COLUMNS = {
         ("last_nav", "NUMERIC(14, 4)"),
         ("last_nav_date", "DATE"),
     ],
+    "insurances": [
+        ("coverage_start_date", "DATE"),
+        ("coverage_end_date", "DATE"),
+        ("premium_paying_term_years", "INTEGER"),
+        ("policy_term_years", "INTEGER"),
+        ("source_account_id", "INTEGER REFERENCES accounts(id)"),
+    ],
 }
 
 

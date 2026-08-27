@@ -4,7 +4,7 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">{{ 'Edit' if policy else 'Add' }} Policy</h1>
-    <p class="page-subtitle">Track cover, premium, and renewal date</p>
+    <p class="page-subtitle">Track cover, premium schedule, and policy dates</p>
   </div>
   <a href="{{ url_for('insurance.index') }}" class="btn btn-ghost">
     <i class="bi bi-arrow-left me-1"></i> Back
@@ -12,7 +12,7 @@
 </div>
 
 <div class="glass-card form-card">
-  <form method="post" novalidate>
+  <form method="post" novalidate id="insuranceForm">
     <div class="row g-3">
       <div class="col-md-8">
         <label class="form-label" for="name">Policy Name</label>
@@ -65,12 +65,27 @@
             </option>
           {% endfor %}
         </select>
+        <div class="form-text" id="frequencyHint">Monthly / quarterly for EMI-style premiums.</div>
       </div>
 
       <div class="col-md-4">
-        <label class="form-label" for="next_renewal_date">Next Renewal</label>
+        <label class="form-label" for="next_renewal_date" id="nextDueLabel">Next premium / renewal</label>
         <input type="date" class="form-control" id="next_renewal_date" name="next_renewal_date"
                value="{{ form_data.get('next_renewal_date', '') }}">
+        <div class="form-text" id="nextDueHint">When the next payment is due.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="source_account_id">Pay from account</label>
+        <select class="form-select" id="source_account_id" name="source_account_id">
+          <option value="">Joint / Expenses (default)</option>
+          {% for acc in accounts %}
+            <option value="{{ acc.id }}"
+              {% if form_data.get('source_account_id')|string == acc.id|string %}selected{% endif %}>
+              {{ acc.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Used when posting premiums from Month checklist.</div>
       </div>
       <div class="col-md-4">
         <label class="form-label" for="owner">Owner</label>
@@ -84,6 +99,46 @@
         <label class="form-label" for="sort_order">Sort Order</label>
         <input type="number" class="form-control" id="sort_order" name="sort_order"
                value="{{ form_data.get('sort_order', '0') }}">
+      </div>
+
+      <div class="col-12 type-fields type-term {% if form_data.get('policy_type') not in ['term', 'life'] %}hidden{% endif %}" id="termFields">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="premium_paying_term_years">Premium paying term (years)</label>
+            <input type="number" min="1" max="100" class="form-control" id="premium_paying_term_years"
+                   name="premium_paying_term_years"
+                   value="{{ form_data.get('premium_paying_term_years', '') }}"
+                   placeholder="e.g. 10">
+            <div class="form-text">How many years you pay premium (PPT) for term cover.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="policy_term_years">Policy term (years)</label>
+            <input type="number" min="1" max="100" class="form-control" id="policy_term_years"
+                   name="policy_term_years"
+                   value="{{ form_data.get('policy_term_years', '') }}"
+                   placeholder="e.g. 30">
+            <div class="form-text">Total cover duration (optional — e.g. to age 60 / 30 years).</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 type-fields type-health {% if form_data.get('policy_type') != 'health' %}hidden{% endif %}" id="healthFields">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="coverage_start_date">Coverage start</label>
+            <input type="date" class="form-control" id="coverage_start_date" name="coverage_start_date"
+                   value="{{ form_data.get('coverage_start_date', '') }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="coverage_end_date">Coverage end</label>
+            <input type="date" class="form-control" id="coverage_end_date" name="coverage_end_date"
+                   value="{{ form_data.get('coverage_end_date', '') }}">
+            <div class="form-text">
+              For multi-year prepaid health (e.g. pay once for 3 years), set the full cover window.
+              One-time frequency requires both dates.
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="col-12">
@@ -112,4 +167,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/amount-words.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/insurance-form.js') }}?v=1"></script>
 {% endblock %}

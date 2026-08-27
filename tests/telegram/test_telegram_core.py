@@ -223,6 +223,41 @@ def test_undo_telegram_transaction(ctx):
     assert db.session.get(Transaction, tid) is None
 
 
+def test_confirm_revives_expired_pending(ctx):
+    code = telegram_service.generate_link_code("self")
+    user = telegram_service.redeem_link_code(code.code, 777)
+    joint = (
+        Account.query.filter(
+            (Account.owner == "joint") | (Account.account_type == "joint")
+        )
+        .filter_by(is_active=True)
+        .first()
+    )
+    assert joint
+    joint.current_balance = Decimal("100000")
+    db.session.commit()
+    dining = Category.query.filter(Category.name.ilike("%dining%")).first()
+    pending = telegram_service.create_pending(
+        user=user,
+        chat_id=777,
+        message_row=None,
+        amount=Decimal("120"),
+        description="late confirm",
+        category_id=dining.id,
+        account_id=joint.id,
+        txn_date=telegram_service.today_local(),
+        paid_by="self",
+    )
+    pending.status = "expired"
+    pending.expires_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    db.session.commit()
+
+    txn = telegram_service.confirm_pending(pending, 777)
+    assert txn.amount == Decimal("120")
+    assert pending.status == "confirmed"
+    assert pending.confirmed_transaction_id == txn.id
+
+
 def test_failed_parse_marks_failed_path(ctx):
     # service-level: mark_message failed with no txn
     msg, _ = telegram_service.record_incoming_update(

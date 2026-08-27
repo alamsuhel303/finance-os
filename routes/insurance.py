@@ -12,7 +12,7 @@ from flask import (
     url_for,
 )
 
-from models import Insurance
+from models import Account, Insurance
 from services import insurance_service
 from services.insurance_service import (
     FREQUENCY_LABELS,
@@ -24,12 +24,18 @@ insurance_bp = Blueprint("insurance", __name__, url_prefix="/insurance")
 
 
 def _form_context():
+    accounts = (
+        Account.query.filter_by(is_active=True)
+        .order_by(Account.sort_order, Account.name)
+        .all()
+    )
     return {
         "policy_types": Insurance.POLICY_TYPES,
         "policy_labels": POLICY_LABELS,
         "premium_frequencies": Insurance.PREMIUM_FREQUENCIES,
         "frequency_labels": FREQUENCY_LABELS,
         "owners": Insurance.OWNERS,
+        "accounts": accounts,
         "currency": current_app.config["CURRENCY_SYMBOL"],
     }
 
@@ -37,15 +43,41 @@ def _form_context():
 @insurance_bp.route("/")
 def index():
     overview = insurance_service.get_overview()
+    premium_status = insurance_service.get_premium_month_status()
     return render_template(
         "insurance/index.html",
         overview=overview,
+        premium_status=premium_status,
         policy_labels=POLICY_LABELS,
         frequency_labels=FREQUENCY_LABELS,
         currency=current_app.config["CURRENCY_SYMBOL"],
         page_title="Insurance",
         active_nav="insurance",
     )
+
+
+@insurance_bp.route("/post-premiums", methods=["POST"])
+def post_premiums():
+    result = insurance_service.post_month_premiums()
+    created = result["created_count"]
+    if created:
+        flash(
+            f"Posted {created} insurance premium"
+            f"{'s' if created != 1 else ''} for {result['label']}.",
+            "success",
+        )
+    elif result["errors"]:
+        flash("Could not post insurance premiums — see details below.", "danger")
+    else:
+        flash(f"No insurance premiums to post for {result['label']}.", "info")
+
+    for err in result["errors"]:
+        flash(err, "danger")
+    if not created and not result["errors"] and result["skipped"]:
+        for msg in result["skipped"][:5]:
+            flash(msg, "secondary")
+
+    return redirect(request.referrer or url_for("insurance.index"))
 
 
 @insurance_bp.route("/new", methods=["GET", "POST"])
@@ -105,6 +137,17 @@ def edit(policy_id: int):
             "next_renewal_date": (
                 item.next_renewal_date.isoformat() if item.next_renewal_date else ""
             ),
+            "coverage_start_date": (
+                item.coverage_start_date.isoformat()
+                if item.coverage_start_date
+                else ""
+            ),
+            "coverage_end_date": (
+                item.coverage_end_date.isoformat() if item.coverage_end_date else ""
+            ),
+            "premium_paying_term_years": item.premium_paying_term_years or "",
+            "policy_term_years": item.policy_term_years or "",
+            "source_account_id": item.source_account_id or "",
             "owner": item.owner,
             "notes": item.notes or "",
             "sort_order": item.sort_order,

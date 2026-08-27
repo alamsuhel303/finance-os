@@ -67,7 +67,7 @@ class Config:
         "yes",
         "on",
     )
-    TELEGRAM_PENDING_TTL_MINUTES = int(os.getenv("TELEGRAM_PENDING_TTL_MINUTES", "60"))
+    TELEGRAM_PENDING_TTL_MINUTES = int(os.getenv("TELEGRAM_PENDING_TTL_MINUTES", "1440"))
     TELEGRAM_LINK_CODE_TTL_MINUTES = int(
         os.getenv("TELEGRAM_LINK_CODE_TTL_MINUTES", "30")
     )

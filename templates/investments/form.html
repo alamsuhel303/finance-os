@@ -41,6 +41,8 @@
         </div>
         <div class="form-text amount-words" id="investedAmountWords"></div>
         <div class="form-text type-hint" data-for="epf">Your EPF balance / contribution so far</div>
+        <div class="form-text type-hint" data-for="gold">What you paid (optional — defaults to metal value on save).</div>
+        <div class="form-text type-hint" data-for="foreign_stock">What you paid in ₹ (optional — defaults to market value on save).</div>
       </div>
       <div class="col-md-4">
         <label class="form-label" for="current_value">Current Value ({{ currency }})</label>
@@ -52,8 +54,10 @@
         </div>
         <div class="form-text amount-words" id="currentValueWords"></div>
         <div class="form-text type-hint" data-for="epf">Usually same as invested for EPF</div>
+        <div class="form-text type-hint" data-for="gold">Auto-filled from grams × 22K rate on save (you can leave 0).</div>
+        <div class="form-text type-hint" data-for="foreign_stock">Auto-filled from shares × live price × FX → ₹ on save.</div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-4 form-section" data-show="mutual_fund,sip,epf,nps,fd,stock,rsu,other">
         <label class="form-label" for="monthly_sip">Monthly amount ({{ currency }})</label>
         <div class="input-prefix input-prefix-lg">
           <span>{{ currency_symbol }}</span>
@@ -64,7 +68,7 @@
         <div class="form-text amount-words" id="monthlySipWords"></div>
         <div class="form-text type-hint" data-for="epf">Employee contribution each month</div>
         <div class="form-text type-hint" data-for="mutual_fund,sip">SIP installment — leave 0 if none</div>
-        <div class="form-text type-hint" data-for="nps,fd,stock,rsu,gold,other">Optional recurring amount</div>
+        <div class="form-text type-hint" data-for="nps,fd,stock,rsu,other">Optional recurring amount</div>
       </div>
 
       {# —— Mutual fund NAV (MF / SIP only) —— #}
@@ -90,16 +94,88 @@
       <div class="col-md-3 form-section" data-show="mutual_fund,sip">
         <label class="form-label" for="units">Units</label>
         <input type="text" inputmode="decimal" class="form-control" id="units" name="units"
-               value="{{ form_data.get('units', '') }}" placeholder="0" autocomplete="off">
-        {% if investment and investment.last_nav %}
+               value="{{ form_data.get('units', '') if form_data.get('asset_type', 'mutual_fund') not in ('gold', 'foreign_stock') else '' }}" placeholder="0" autocomplete="off">
+        {% if investment and investment.last_nav and investment.asset_type not in ('gold', 'foreign_stock') %}
           <div class="form-text">
             Last NAV {{ '%.4f'|format(investment.last_nav|float) }}
             {% if investment.last_nav_date %} · {{ investment.last_nav_date.strftime('%d %b %Y') }}{% endif %}
           </div>
         {% endif %}
       </div>
-      {# —— Monthly auto-post —— #}
-      <div class="col-12 form-section" data-show="mutual_fund,sip,epf,nps,fd,gold,other">
+
+      {# —— Gold (22 carat) —— #}
+      <div class="col-12 form-section" data-show="gold">
+        <div class="section-divider">
+          <h2 class="section-title mb-1">Gold · 22 carat</h2>
+          <p class="form-text mb-0">
+            Enter weight in grams. Current value is calculated as
+            <strong>grams × live 22K ₹/gram</strong> (metal value; no making charges / GST).
+            Use <strong>Refresh values</strong> later to update the rate.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4 form-section" data-show="gold">
+        <label class="form-label" for="gold_grams">Grams</label>
+        <input type="text" inputmode="decimal" class="form-control" id="gold_grams" name="units"
+               value="{{ form_data.get('units', '') if form_data.get('asset_type') == 'gold' else '' }}"
+               placeholder="e.g. 20" autocomplete="off">
+        <div class="form-text">Purity fixed at 22K (916).</div>
+      </div>
+      <div class="col-md-8 form-section d-flex align-items-end" data-show="gold">
+        <div class="form-text mb-2">
+          {% if investment and investment.asset_type == 'gold' and investment.last_nav %}
+            Last 22K rate ₹{{ '%.2f'|format(investment.last_nav|float) }}/g
+            {% if investment.last_nav_date %} · {{ investment.last_nav_date.strftime('%d %b %Y') }}{% endif %}
+            {% if investment.units %}
+              · {{ '%.4f'|format(investment.units|float) }} g → {{ investment.current_value | inr }}
+            {% endif %}
+          {% else %}
+            Invested = what you paid (optional). Leave current value blank — it fills from grams × rate on save.
+          {% endif %}
+        </div>
+      </div>
+
+      {# —— Foreign stock (US / overseas) —— #}
+      <div class="col-12 form-section" data-show="foreign_stock">
+        <div class="section-divider">
+          <h2 class="section-title mb-1">Foreign stock</h2>
+          <p class="form-text mb-0">
+            Enter the company ticker and share count. Current value is
+            <strong>shares × live price × FX → ₹</strong>.
+            Use <strong>Refresh values</strong> later to update the quote.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-4 form-section" data-show="foreign_stock">
+        <label class="form-label" for="ticker">Ticker</label>
+        <input type="text" class="form-control" id="ticker" name="scheme_code"
+               value="{{ form_data.get('scheme_code', '') if form_data.get('asset_type') == 'foreign_stock' else '' }}"
+               placeholder="AMZN" maxlength="20" autocomplete="off" style="text-transform: uppercase">
+        <div class="form-text">Yahoo symbol — e.g. AMZN, DELL, AAPL</div>
+      </div>
+      <div class="col-md-4 form-section" data-show="foreign_stock">
+        <label class="form-label" for="foreign_shares">Shares</label>
+        <input type="text" inputmode="decimal" class="form-control" id="foreign_shares" name="units"
+               value="{{ form_data.get('units', '') if form_data.get('asset_type') == 'foreign_stock' else '' }}"
+               placeholder="e.g. 10" autocomplete="off">
+      </div>
+      <div class="col-md-4 form-section d-flex align-items-end" data-show="foreign_stock">
+        <div class="form-text mb-2">
+          {% if investment and investment.asset_type == 'foreign_stock' and investment.last_nav %}
+            Last {{ investment.scheme_code }}
+            {{ '%.2f'|format(investment.last_nav|float) }}
+            {% if investment.last_nav_date %} · {{ investment.last_nav_date.strftime('%d %b %Y') }}{% endif %}
+            {% if investment.units %}
+              · {{ '%.4f'|format(investment.units|float) }} sh → {{ investment.current_value | inr }}
+            {% endif %}
+          {% else %}
+            Leave current value blank — it fills from market price on save.
+          {% endif %}
+        </div>
+      </div>
+
+      {# —— Monthly auto-post (not for gold / foreign stock) —— #}
+      <div class="col-12 form-section" data-show="mutual_fund,sip,epf,nps,fd,other">
         <div class="section-divider">
           <h2 class="section-title mb-1">Monthly auto-post</h2>
           <p class="form-text mb-0 type-hint" data-for="epf">
@@ -108,15 +184,15 @@
           <p class="form-text mb-0 type-hint" data-for="mutual_fund,sip">
             Debits your source account when you click <strong>Post this month</strong>.
           </p>
-          <p class="form-text mb-0 type-hint" data-for="nps,fd,gold,other">
+          <p class="form-text mb-0 type-hint" data-for="nps,fd,other">
             Optional schedule for <strong>Post this month</strong>.
           </p>
         </div>
       </div>
-      <div class="col-md-4 form-section" data-show="mutual_fund,sip,epf,nps,fd,gold,other">
+      <div class="col-md-4 form-section" data-show="mutual_fund,sip,epf,nps,fd,other">
         <label class="form-label" for="sip_day">
           <span class="type-hint" data-for="epf">Credit day</span>
-          <span class="type-hint" data-for="mutual_fund,sip,nps,fd,gold,other">Debit day</span>
+          <span class="type-hint" data-for="mutual_fund,sip,nps,fd,other">Debit day</span>
         </label>
         <select class="form-select" id="sip_day" name="sip_day">
           <option value="">—</option>
@@ -127,7 +203,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-4 form-section" data-show="mutual_fund,sip,nps,fd,gold,other">
+      <div class="col-md-4 form-section" data-show="mutual_fund,sip,nps,fd,other">
         <label class="form-label" for="source_account_id">Source account</label>
         <select class="form-select" id="source_account_id" name="source_account_id">
           <option value="">— Select —</option>
@@ -141,7 +217,7 @@
         </select>
         <div class="form-text">Cash account to debit when posting</div>
       </div>
-      <div class="col-md-4 d-flex align-items-end form-section" data-show="mutual_fund,sip,epf,nps,fd,gold,other">
+      <div class="col-md-4 d-flex align-items-end form-section" data-show="mutual_fund,sip,epf,nps,fd,other">
         <div class="form-check mb-2">
           <input class="form-check-input" type="checkbox" id="sip_active" name="sip_active" value="1"
                  {% if form_data.get('sip_active', '1') in ['1', 'true', 'on'] %}checked{% endif %}>
@@ -153,7 +229,9 @@
         <label class="form-label" for="owner">Owner</label>
         <select class="form-select" id="owner" name="owner">
           {% for o in owners %}
-            <option value="{{ o }}" {% if form_data.get('owner', 'joint') == o %}selected{% endif %}>{{ o | capitalize }}</option>
+            <option value="{{ o }}" {% if form_data.get('owner', 'joint') == o %}selected{% endif %}>
+              {{ owner_labels.get(o, o | capitalize) }}
+            </option>
           {% endfor %}
         </select>
       </div>
@@ -204,5 +282,5 @@
   window.SCHEME_SEARCH_URL = {{ url_for('investments.search_schemes') | tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/amount-words.js') }}?v=3"></script>
-<script src="{{ url_for('static', filename='js/investment-form.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/investment-form.js') }}?v=5"></script>
 {% endblock %}

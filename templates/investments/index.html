@@ -4,10 +4,31 @@
 <div class="page-header">
   <div>
     <h1 class="page-title">Investments</h1>
-    <p class="page-subtitle">Portfolio holdings · SIPs, funds, EPF, RSUs & more</p>
+    <p class="page-subtitle">
+      {% if active_owner %}
+        {{ owner_labels.get(active_owner, active_owner | capitalize) }}'s portfolio · SIPs, funds, EPF, RSUs & more
+      {% else %}
+        Portfolio holdings · SIPs, funds, EPF, RSUs & more
+      {% endif %}
+    </p>
+    {% if filter_owners %}
+    <div class="holding-filters mt-2" role="group" aria-label="Filter portfolio by owner">
+      <a href="{{ url_for('investments.index', edit=1 if edit_mode else None) }}"
+         class="holding-filter-chip{% if not active_owner %} is-active{% endif %}">
+        All <span class="holding-filter-count">{{ all_active_count }}</span>
+      </a>
+      {% for fo in filter_owners %}
+        <a href="{{ url_for('investments.index', owner=fo.owner, edit=1 if edit_mode else None) }}"
+           class="holding-filter-chip{% if active_owner == fo.owner %} is-active{% endif %}">
+          {{ fo.label }} <span class="holding-filter-count">{{ fo.count }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   <div class="d-flex flex-wrap gap-2">
     <form method="post" action="{{ url_for('investments.refresh_navs') }}" class="d-inline">
+      {% if active_owner %}<input type="hidden" name="owner" value="{{ active_owner }}">{% endif %}
       <button type="submit" class="btn btn-ghost"
               title="Fetch latest market price and recalculate current value (units × NAV). Units grow when you Post this month.">
         <i class="bi bi-arrow-repeat me-1"></i> Refresh values
@@ -147,8 +168,7 @@
         {% for row in summary.allocation %}
           <button type="button"
                   class="account-row account-row-link holding-type-row"
-                  data-filter-type="{{ row.type }}"
-                  style="width:100%; text-align:left; background:transparent; border:none; cursor:pointer">
+                  data-filter-type="{{ row.type }}">
             <div>
               <div class="account-name">{{ row.label }}</div>
               <div class="account-type">{{ row.count }} holding{{ 's' if row.count != 1 else '' }} · {{ row.pct }}%</div>
@@ -177,11 +197,11 @@
     </div>
     <div class="d-flex gap-2 flex-wrap">
       {% if edit_mode %}
-        <a href="{{ url_for('investments.index') }}#holdings" class="btn btn-ghost">
+        <a href="{{ url_for('investments.index', owner=active_owner) }}#holdings" class="btn btn-ghost">
           <i class="bi bi-lock me-1"></i> Lock
         </a>
       {% else %}
-        <a href="{{ url_for('investments.index', edit=1) }}#holdings" class="btn btn-accent">
+        <a href="{{ url_for('investments.index', owner=active_owner, edit=1) }}#holdings" class="btn btn-accent">
           <i class="bi bi-pencil me-1"></i> Edit holdings
         </a>
       {% endif %}
@@ -191,7 +211,7 @@
   {% if filter_types %}
     <div class="holding-filters mb-3" role="group" aria-label="Filter holdings by type">
       <button type="button" class="holding-filter-chip is-active" data-filter-type="">
-        All <span class="holding-filter-count">{{ summary.count }}</span>
+        All types
       </button>
       {% for ft in filter_types %}
         <button type="button" class="holding-filter-chip" data-filter-type="{{ ft.type }}">
@@ -202,6 +222,15 @@
   {% endif %}
 
   {% if holdings %}
+      <div class="mb-3">
+        <label class="visually-hidden" for="holdingsSearch">Search holdings</label>
+        <div class="input-prefix">
+          <span><i class="bi bi-search" aria-hidden="true"></i></span>
+          <input type="search" class="form-control" id="holdingsSearch"
+                 placeholder="Search holdings by name, ticker, or type…"
+                 autocomplete="off">
+        </div>
+      </div>
       <div class="table-wrap">
         <table class="fos-table" id="holdingsTable">
           <thead>
@@ -222,23 +251,39 @@
           </thead>
           <tbody>
             {% for inv in holdings %}
-              <tr data-asset-type="{{ inv.asset_type }}">
+              <tr data-asset-type="{{ inv.asset_type }}" data-owner="{{ inv.owner }}"
+                  data-search="{{ (inv.name ~ ' ' ~ (inv.scheme_code or '') ~ ' ' ~ (asset_labels.get(inv.asset_type, inv.asset_type)) ~ ' ' ~ (owner_labels.get(inv.owner, inv.owner))) | lower }}"
+                  {% if not inv.is_active %}style="opacity:0.55"{% endif %}>
                 <td class="desc-cell">
                   {{ inv.name }}
+                  {% if not inv.is_active %}
+                    <span class="badge-type badge-expense">Inactive</span>
+                  {% endif %}
                   {% if inv.scheme_code %}
                     <span class="stat-meta d-block">
-                      {{ inv.scheme_code }}
-                      {% if inv.units %} · {{ '%.4f'|format(inv.units|float) }} u{% endif %}
+                      {% if inv.asset_type == 'gold' %}
+                        {{ '%.2f'|format(inv.units|float) }} g · 22K
+                        {% if inv.last_nav %} · ₹{{ '%.0f'|format(inv.last_nav|float) }}/g{% endif %}
+                      {% elif inv.asset_type == 'foreign_stock' %}
+                        {{ inv.scheme_code }}
+                        {% if inv.units %} · {{ '%.4f'|format(inv.units|float) }} sh{% endif %}
+                        {% if inv.last_nav %} · ${{ '%.2f'|format(inv.last_nav|float) }}{% endif %}
+                      {% else %}
+                        {{ inv.scheme_code }}
+                        {% if inv.units %} · {{ '%.4f'|format(inv.units|float) }} u{% endif %}
+                      {% endif %}
                     </span>
+                  {% elif inv.asset_type == 'gold' and inv.units %}
+                    <span class="stat-meta d-block">{{ '%.2f'|format(inv.units|float) }} g · 22K</span>
                   {% endif %}
                 </td>
                 <td><span class="badge-type badge-investment">{{ asset_labels.get(inv.asset_type, inv.asset_type) }}</span></td>
-                <td>{{ inv.owner | capitalize }}</td>
+                <td>{{ owner_labels.get(inv.owner, inv.owner | capitalize) }}</td>
                 <td class="amount-cell">{{ inv.invested_amount | inr }}</td>
                 <td class="amount-cell">{{ inv.current_value | inr }}</td>
                 <td class="stat-meta">
                   {% if inv.last_nav %}
-                    {{ '%.2f'|format(inv.last_nav|float) }}
+                    {% if inv.asset_type == 'foreign_stock' %}${% endif %}{{ '%.2f'|format(inv.last_nav|float) }}
                     {% if inv.last_nav_date %}
                       <span class="d-block">{{ inv.last_nav_date.strftime('%d %b') }}</span>
                     {% endif %}
@@ -280,7 +325,7 @@
                     <i class="bi bi-pencil"></i>
                   </a>
                   <form method="post" action="{{ url_for('investments.delete', inv_id=inv.id) }}" class="d-inline"
-                        onsubmit="return confirm('Delete this investment?');">
+                        onsubmit="return confirm('Delete this investment? Past SIP transactions stay in your ledger (cash history) but will be unlinked from this holding.');">
                     <button type="submit" class="btn-icon" title="Delete" style="color: var(--danger)">
                       <i class="bi bi-trash"></i>
                     </button>
@@ -294,8 +339,8 @@
       </div>
       <div class="empty-state py-4 hidden" id="holdingsFilterEmpty">
         <i class="bi bi-funnel"></i>
-        <div>No holdings in this type</div>
-        <button type="button" class="btn btn-ghost btn-sm mt-2" data-filter-type="">Show all</button>
+        <div>No holdings match these filters</div>
+        <button type="button" class="btn btn-ghost btn-sm mt-2" data-clear-filters="1">Show all</button>
       </div>
   {% else %}
     <div class="empty-state">
@@ -320,5 +365,5 @@
     ) | tojson }}
   };
 </script>
-<script src="{{ url_for('static', filename='js/investments.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/investments.js') }}?v=5"></script>
 {% endblock %}
