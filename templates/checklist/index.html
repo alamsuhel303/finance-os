@@ -27,7 +27,7 @@
     {% endfor %}
   </ol>
   <p class="page-subtitle mb-0 mt-2">
-    Order: income → {% if is_couple_mode %}Fund Joint{% else %}Fund Expenses{% endif %} → SIPs → EPF → snapshot. EPF is separate (salary deduction, not a bank SIP).
+    Order: income → {% if is_couple_mode %}Fund Joint{% else %}Fund Expenses{% endif %} → SIPs → EPF → insurance → snapshot. EPF is separate (salary deduction, not a bank SIP).
   </p>
 </nav>
 
@@ -91,7 +91,7 @@
     <h2 class="section-title">Other reminders</h2>
     <p class="page-subtitle mb-3">Backup, insurance, and anything else due</p>
     {% for rem in reminders %}
-      {% if rem.key not in ['income_post', 'income_setup', 'joint_fund', 'sip_post', 'epf_post', 'nw_snapshot'] %}
+      {% if rem.key not in ['income_post', 'income_setup', 'joint_fund', 'sip_post', 'epf_post', 'insurance_premium', 'insurance_renewal', 'nw_snapshot'] %}
         <div class="account-row">
           <div>
             <div class="account-name">{{ rem.title }}</div>

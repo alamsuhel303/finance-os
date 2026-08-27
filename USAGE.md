@@ -174,7 +174,8 @@ This only relabels Joint purpose pots — **bank balances do not change**. It is
 
 - Add holdings (MF, SIP, stock, EPF, FD…).
 - **Post this month** — posts due SIPs as investment transactions (also on Month checklist).
-- **Refresh values** — updates NAVs/values where configured.
+- **Refresh values** — updates mutual-fund NAVs and gold (grams × live 22K ₹/g).
+- **Gold** — type Gold, enter grams (22K fixed); current value is calculated automatically.
 - Link a holding’s purpose/goal (e.g. Emergency, Home) so Goals and Emergency totals stay accurate.
 
 ---
@@ -189,7 +190,16 @@ This only relabels Joint purpose pots — **bank balances do not change**. It is
 
 ## Insurance
 
-Track policies and renewal dates. Due-soon policies appear in Dashboard reminders and on the Month page under “Other reminders”.
+Track policies, premium schedule, and renewal dates. Due premiums appear on **Month** checklist — **Post insurance** creates an Insurance expense and advances the next due date.
+
+| Field | When |
+|-------|------|
+| Premium frequency | Monthly / quarterly / yearly / one-time (multi-year prepaid) |
+| Pay from account | Debited when posting from Month (defaults to Joint / Expenses) |
+| Premium paying term + policy term | Term (and life) — e.g. pay 15 years, cover 30 years |
+| Coverage start / end | Health — e.g. pay once for 3 years of cover |
+
+For health one-time policies, both coverage dates are required; next renewal defaults to coverage end.
 
 ---
 

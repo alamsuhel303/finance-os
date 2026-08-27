@@ -51,6 +51,7 @@ def build_application(flask_app) -> Application:
         Application.builder()
         .token(token)
         .get_updates_read_timeout(timeout + 5)
+        .concurrent_updates(True)
         .build()
     )
     app.bot_data["flask_app"] = flask_app

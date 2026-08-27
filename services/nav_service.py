@@ -107,8 +107,13 @@ def refresh_investment(inv: Investment) -> dict[str, Any]:
     """Update one holding from latest NAV. Returns result meta."""
     if not inv.scheme_code:
         raise NavServiceError(f"“{inv.name}” has no scheme code.")
+    code = (inv.scheme_code or "").strip()
+    if not code.isdigit():
+        raise NavServiceError(
+            f"“{inv.name}” has scheme code “{code}” — must be a numeric AMFI code."
+        )
 
-    quote = fetch_latest_nav(inv.scheme_code)
+    quote = fetch_latest_nav(code)
     nav = quote["nav"]
     old_nav = Decimal(inv.last_nav) if inv.last_nav is not None else None
     units = Decimal(inv.units or 0)
@@ -144,12 +149,13 @@ def refresh_investment(inv: Investment) -> dict[str, Any]:
 
 
 def refresh_all_nav_holdings() -> dict[str, Any]:
-    """Refresh every active holding that has a scheme_code."""
+    """Refresh every active holding that has a numeric AMFI scheme_code."""
     holdings = (
         Investment.query.filter(
             Investment.is_active.is_(True),
             Investment.scheme_code.isnot(None),
             Investment.scheme_code != "",
+            Investment.asset_type != "gold",
         )
         .order_by(Investment.name)
         .all()
@@ -159,6 +165,10 @@ def refresh_all_nav_holdings() -> dict[str, Any]:
     errors: list[str] = []
 
     for inv in holdings:
+        code = (inv.scheme_code or "").strip()
+        if not code.isdigit():
+            # Gold uses "22K"; other non-AMFI markers skip quietly
+            continue
         if inv.asset_type not in NAV_ASSET_TYPES and inv.asset_type != "other":
             # Still allow refresh if they set a scheme code on MF-like holdings
             pass
@@ -172,7 +182,10 @@ def refresh_all_nav_holdings() -> dict[str, Any]:
             else:
                 updated.append(inv.name)
         except NavServiceError as exc:
-            errors.append(str(exc))
+            msg = str(exc)
+            if inv.name and inv.name not in msg:
+                msg = f"{inv.name}: {msg}"
+            errors.append(msg)
         except Exception as exc:  # noqa: BLE001 — isolate per-holding failures
             logger.exception("NAV refresh failed for %s", inv.id)
             errors.append(f"{inv.name}: {exc}")
@@ -182,7 +195,9 @@ def refresh_all_nav_holdings() -> dict[str, Any]:
         "updated_count": len(updated),
         "skipped": skipped,
         "errors": errors,
-        "eligible_count": len(holdings),
+        "eligible_count": sum(
+            1 for inv in holdings if (inv.scheme_code or "").strip().isdigit()
+        ),
     }
 
 

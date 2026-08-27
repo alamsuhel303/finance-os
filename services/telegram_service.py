@@ -394,23 +394,20 @@ def require_editable_pending(
 
 
 def get_active_pending_for_user(telegram_user_id: int) -> TelegramPendingTransaction | None:
-    now = _utcnow()
+    """Latest open draft for edit follow-ups; revives expired drafts like Confirm does."""
     row = (
-        TelegramPendingTransaction.query.filter_by(
-            telegram_user_id=int(telegram_user_id), status="pending"
+        TelegramPendingTransaction.query.filter(
+            TelegramPendingTransaction.telegram_user_id == int(telegram_user_id),
+            TelegramPendingTransaction.status.in_(("pending", "expired")),
         )
         .order_by(TelegramPendingTransaction.id.desc())
         .first()
     )
     if not row:
         return None
-    exp = row.expires_at
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp < now:
-        row.status = "expired"
-        db.session.commit()
-        return None
+    if row.status == "expired":
+        row.status = "pending"
+        touch_pending(row)
     return row
 
 

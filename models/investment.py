@@ -19,6 +19,7 @@ class Investment(db.Model):
         "mutual_fund",
         "sip",
         "stock",
+        "foreign_stock",
         "rsu",
         "epf",
         "fd",

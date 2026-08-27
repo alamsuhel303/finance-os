@@ -208,7 +208,35 @@ def get_month_reminders(ref: date | None = None) -> list[dict[str, Any]]:
         )
 
     overview = insurance_service.get_overview()
-    if overview["due_soon_count"]:
+    premium = insurance_service.get_premium_month_status(year, month)
+    if premium["ready_count"]:
+        ready_names = [
+            r["policy"].name for r in premium["rows"] if r["status"] == "ready"
+        ]
+        names = ", ".join(ready_names[:3])
+        reminders.append(
+            {
+                "key": "insurance_premium",
+                "severity": "warning",
+                "title": "Insurance premiums ready",
+                "detail": (
+                    f"{premium['ready_count']} to post for {premium['label']}: {names}"
+                ),
+                "actions": [
+                    {
+                        "label": "Post premiums",
+                        "url": "insurance.post_premiums",
+                        "method": "POST",
+                    },
+                    {
+                        "label": "Insurance",
+                        "url": "insurance.index",
+                        "method": "GET",
+                    },
+                ],
+            }
+        )
+    elif overview["due_soon_count"]:
         names = ", ".join(p.name for p in overview["due_soon"][:3])
         reminders.append(
             {

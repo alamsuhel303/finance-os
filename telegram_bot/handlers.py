@@ -6,6 +6,7 @@ import logging
 from decimal import Decimal
 
 from telegram import Update
+from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import ContextTypes
 
 from extensions import db
@@ -410,11 +411,24 @@ async def cmd_undo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def _answer_callback(query) -> None:
+    """Acknowledge tap — must be fast, but never block confirm/save if Telegram expired it."""
+    try:
+        await query.answer()
+    except BadRequest as exc:
+        if "query is too old" in str(exc).lower() or "query id is invalid" in str(exc).lower():
+            logger.warning("Callback query expired (Mac sleep / backlog): %s", exc)
+        else:
+            logger.warning("Callback answer failed: %s", exc)
+    except Exception as exc:
+        logger.warning("Callback answer failed: %s", exc)
+
+
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not query.data or not query.from_user:
         return
-    await query.answer()
+    await _answer_callback(query)
     data = query.data
     tg_id = query.from_user.id
     user = require_user(tg_id)
@@ -451,7 +465,8 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
 
         if action == "confirm":
-            pending = telegram_service.get_pending(int(parts[2]))
+            pending_id = int(parts[2])
+            pending = telegram_service.require_editable_pending(pending_id, tg_id)
             txn = telegram_service.confirm_pending(pending, tg_id)
             await _callback_reply(query, telegram_service.success_added_text(txn))
             return
@@ -560,8 +575,13 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
 
-async def _callback_reply(query, text: str, reply_markup=None) -> None:
-    """Edit the callback message; if that fails, send a fresh reply so UI doesn't vanish."""
+async def _callback_reply(query, text: str, reply_markup=None, *, force_new: bool = False) -> None:
+    """Edit the callback message; fall back to a new reply so the user always sees the result."""
+    if force_new and query.message:
+        await query.message.reply_text(
+            text, parse_mode=PARSE_MODE, reply_markup=reply_markup
+        )
+        return
     try:
         await query.edit_message_text(
             text, parse_mode=PARSE_MODE, reply_markup=reply_markup

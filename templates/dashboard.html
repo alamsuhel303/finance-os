@@ -21,14 +21,14 @@
 </div>
 
 {% if summary.reminders %}
-  <div class="mb-4">
+  <div class="mb-4" id="dashboardReminders">
     {% for rem in summary.reminders %}
-      <div class="alert alert-{{ 'warning' if rem.severity == 'warning' else 'info' }} d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2" role="status">
-        <div>
+      <div class="alert alert-{{ 'warning' if rem.severity == 'warning' else 'info' }} alert-dismissible fade show d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2" role="status">
+        <div class="me-auto pe-2">
           <strong>{{ rem.title }}</strong>
           <div class="stat-meta mb-0" style="opacity:0.9">{{ rem.detail }}</div>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
+        <div class="d-flex gap-2 flex-wrap align-items-center">
           {% for action in rem.actions %}
             {% if action.method == 'POST' %}
               <form method="post" action="{{ url_for(action.url) }}" class="d-inline">
@@ -40,6 +40,10 @@
               <a href="{{ url_for(action.url) }}" class="btn btn-sm btn-ghost">{{ action.label }}</a>
             {% endif %}
           {% endfor %}
+          <button type="button" class="alert-dismiss-btn" data-bs-dismiss="alert"
+                  aria-label="Dismiss" title="Dismiss until refresh">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
         </div>
       </div>
     {% endfor %}

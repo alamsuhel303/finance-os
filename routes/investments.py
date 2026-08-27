@@ -13,21 +13,27 @@ from flask import (
     url_for,
 )
 
+from extensions import db
 from models import Goal, Investment
 from services import account_service, investment_service, nav_service
 from services.investment_service import ASSET_LABELS, InvestmentValidationError
 from services.nav_service import NavServiceError
+from sqlalchemy import func
 
 investments_bp = Blueprint("investments", __name__, url_prefix="/investments")
 
 
 def _form_context():
+    from services import profile_service
+
     goals = Goal.query.filter_by(is_active=True).order_by(Goal.sort_order, Goal.name).all()
     accounts = account_service.list_accounts(active_only=True)
+    owner_labels = {**profile_service.get_owner_labels(), "joint": "Joint"}
     return {
         "asset_types": Investment.ASSET_TYPES,
         "asset_labels": ASSET_LABELS,
         "owners": Investment.OWNERS,
+        "owner_labels": owner_labels,
         "goals": goals,
         "accounts": accounts,
         "sip_days": list(range(1, 29)),
@@ -44,7 +50,13 @@ def _form_payload() -> dict:
 
 @investments_bp.route("/")
 def index():
-    summary = investment_service.get_portfolio_summary()
+    from services import profile_service
+
+    owner = (request.args.get("owner") or "").strip().lower() or None
+    if owner and owner not in Investment.OWNERS:
+        owner = None
+
+    summary = investment_service.get_portfolio_summary(owner=owner)
     edit_mode = request.args.get("edit") in ("1", "true", "yes")
     holdings = summary["investments"]
     filter_types = [
@@ -55,7 +67,33 @@ def index():
         }
         for row in (summary.get("allocation") or [])
     ]
-    goals = Goal.query.filter_by(is_active=True).order_by(Goal.sort_order, Goal.name).all()
+    labels = {**profile_service.get_owner_labels(), "joint": "Joint"}
+
+    # Chip counts always reflect the full portfolio (not the filtered view)
+    owner_counts = {
+        row[0]: row[1]
+        for row in (
+            db.session.query(Investment.owner, func.count(Investment.id))
+            .filter(Investment.is_active.is_(True))
+            .group_by(Investment.owner)
+            .all()
+        )
+    }
+    all_active_count = sum(owner_counts.values())
+
+    owner_keys = ["self"]
+    if profile_service.is_couple_mode():
+        owner_keys.append("wife")
+    owner_keys.append("joint")
+    filter_owners = [
+        {
+            "owner": key,
+            "label": labels.get(key, key.title()),
+            "count": owner_counts.get(key, 0),
+        }
+        for key in owner_keys
+    ]
+
     return render_template(
         "investments/index.html",
         summary=summary,
@@ -63,6 +101,10 @@ def index():
         asset_labels=ASSET_LABELS,
         edit_mode=edit_mode,
         filter_types=filter_types,
+        filter_owners=filter_owners,
+        owner_labels=labels,
+        active_owner=owner,
+        all_active_count=all_active_count,
         page_title="Investments",
         active_nav="investments",
     )
@@ -129,29 +171,66 @@ def save_holdings():
 
 @investments_bp.route("/refresh-navs", methods=["POST"])
 def refresh_navs():
+    from services import foreign_stock_service, gold_service
+
     result = nav_service.refresh_all_nav_holdings()
-    if result["updated_count"]:
+    gold = gold_service.refresh_all_gold_holdings()
+    foreign = foreign_stock_service.refresh_all_foreign_stock_holdings()
+
+    updated = (
+        result["updated_count"] + gold["updated_count"] + foreign["updated_count"]
+    )
+    errors = (
+        list(result.get("errors") or [])
+        + list(gold.get("errors") or [])
+        + list(foreign.get("errors") or [])
+    )
+    skipped = (
+        list(result.get("skipped") or [])
+        + list(gold.get("skipped") or [])
+        + list(foreign.get("skipped") or [])
+    )
+    eligible = (
+        result.get("eligible_count", 0)
+        + gold.get("eligible_count", 0)
+        + foreign.get("eligible_count", 0)
+    )
+
+    if updated:
+        parts = []
+        if result["updated_count"]:
+            parts.append(f"{result['updated_count']} fund")
+        if gold["updated_count"]:
+            rate = gold.get("price_per_gram_22k")
+            rate_bit = f" @ ₹{rate:,.0f}/g 22K" if rate is not None else ""
+            parts.append(f"{gold['updated_count']} gold{rate_bit}")
+        if foreign["updated_count"]:
+            fx = foreign.get("usd_inr")
+            fx_bit = f" · USD/INR {fx:.2f}" if fx is not None else ""
+            parts.append(f"{foreign['updated_count']} foreign stock{fx_bit}")
         flash(
-            f"Updated market value for {result['updated_count']} holding"
-            f"{'s' if result['updated_count'] != 1 else ''} (latest price × units).",
+            f"Updated market value for {' + '.join(parts)}.",
             "success",
         )
-    elif result["eligible_count"] == 0:
+    elif eligible == 0:
         flash(
-            "No holdings with a scheme code yet. Edit a mutual fund and set AMFI scheme code + units.",
+            "Nothing to refresh yet. Add mutual-fund scheme+units, gold grams, or foreign ticker+shares.",
             "info",
         )
-    elif result["errors"]:
+    elif errors:
         flash("Value refresh had errors — see details.", "danger")
     else:
-        flash("Prices saved where possible. Add units for exact market value.", "info")
+        flash("Prices saved where possible. Add units/grams/shares for exact market value.", "info")
 
-    for err in result["errors"][:5]:
+    for err in errors[:5]:
         flash(err, "danger")
-    for msg in result["skipped"][:3]:
+    for msg in skipped[:3]:
         flash(msg, "secondary")
 
-    return redirect(url_for("investments.index"))
+    owner = (request.form.get("owner") or "").strip().lower() or None
+    if owner and owner not in Investment.OWNERS:
+        owner = None
+    return redirect(url_for("investments.index", owner=owner))
 
 
 @investments_bp.route("/search-schemes")
@@ -295,8 +374,15 @@ def delete(inv_id: int):
     else:
         name = inv.name
         try:
-            investment_service.delete_investment(inv)
-            flash(f"Deleted {name}.", "success")
+            unlinked = investment_service.delete_investment(inv)
+            if unlinked:
+                flash(
+                    f"Deleted {name}. Unlinked {unlinked} past SIP/investment "
+                    f"transaction{'s' if unlinked != 1 else ''} (cash history kept).",
+                    "success",
+                )
+            else:
+                flash(f"Deleted {name}.", "success")
         except InvestmentValidationError as exc:
             flash(str(exc), "danger")
     return redirect(url_for("investments.index", edit=1))

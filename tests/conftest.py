@@ -30,7 +30,7 @@ def app(tmp_path):
             "TELEGRAM_BOT_TOKEN": "test-token",
             "TELEGRAM_TIMEZONE": "Asia/Kolkata",
             "TELEGRAM_LINK_CODE_TTL_MINUTES": 30,
-            "TELEGRAM_PENDING_TTL_MINUTES": 60,
+            "TELEGRAM_PENDING_TTL_MINUTES": 1440,
             "TELEGRAM_NOTIFY_STARTUP": False,
             "BACKUP_MAX_AGE_DAYS": 7,
         }

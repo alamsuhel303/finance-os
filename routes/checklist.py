@@ -1,4 +1,4 @@
-"""Month checklist — income, Joint funding, SIPs, EPF, net-worth snapshot."""
+"""Month checklist — income, Joint funding, SIPs, EPF, insurance, net-worth snapshot."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from flask import Blueprint, current_app, render_template
 
 from models import NetWorthSnapshot
 from services import (
+    insurance_service,
     investment_service,
     joint_funding_service,
     reminder_service,
@@ -34,6 +35,7 @@ def index():
     joint = joint_funding_service.get_month_status(year, month)
     sip = investment_service.get_sip_month_status(year, month)
     epf = investment_service.get_epf_month_status(year, month)
+    insurance = insurance_service.get_premium_month_status(year, month)
     snap = NetWorthSnapshot.query.filter_by(snapshot_date=this_month).first()
     funding_ui = joint_funding_service.funding_ui()
 
@@ -73,6 +75,15 @@ def index():
             "amount": _epf_amount(epf),
             "status": _epf_status(epf),
             "actions": _epf_actions(epf),
+        },
+        {
+            "key": "insurance",
+            "title": "Post insurance",
+            "blurb": "Premiums due this month",
+            "detail": _insurance_detail(insurance),
+            "amount": _insurance_amount(insurance),
+            "status": _insurance_status(insurance),
+            "actions": _insurance_actions(insurance),
         },
         {
             "key": "snapshot",
@@ -345,6 +356,69 @@ def _epf_actions(epf: dict) -> list[dict]:
             {"label": "Post EPF", "url": "investments.post_epf", "method": "POST"}
         )
     actions.append({"label": "Investments", "url": "investments.index", "method": "GET"})
+    return actions
+
+
+def _insurance_status(ins: dict) -> str:
+    if ins.get("plan_count", 0) == 0:
+        return "idle"
+    if ins.get("ready_count", 0) > 0:
+        return "ready"
+    if ins.get("posted_count", 0) > 0:
+        return "done"
+    # Policies exist but none due this month
+    return "idle"
+
+
+def _insurance_amount(ins: dict) -> str | None:
+    if ins.get("ready_count", 0) > 0:
+        return _fmt(ins.get("ready_total"))
+    if ins.get("posted_count", 0) > 0 and ins.get("ready_count", 0) == 0:
+        return _fmt(ins.get("posted_total"))
+    return None
+
+
+def _insurance_detail(ins: dict) -> str:
+    if ins.get("plan_count", 0) == 0:
+        return "No active policies with premiums — optional."
+    if ins.get("ready_count", 0) > 0:
+        parts = [
+            f"{row['policy'].name} {_fmt(row['amount'])}"
+            for row in ins["rows"]
+            if row["status"] == "ready"
+        ]
+        return (
+            f"{ins['ready_count']} premium{'s' if ins['ready_count'] != 1 else ''} ready · "
+            f"{_fmt(ins['ready_total'])}"
+            + (f" — {', '.join(parts[:3])}" if parts else "")
+        )
+    if ins.get("posted_count", 0) > 0:
+        return (
+            f"Posted {_fmt(ins.get('posted_total'))} for {ins.get('label', 'this month')} "
+            f"({ins['posted_count']} polic{'ies' if ins['posted_count'] != 1 else 'y'})"
+        )
+    skipped = [r for r in ins["rows"] if r["status"] == "skipped"]
+    if skipped:
+        reasons = skipped[0]["reasons"]
+        return (
+            f"{len(skipped)} due but need setup"
+            + (f" ({', '.join(reasons)})" if reasons else "")
+            + " — set Pay-from account on the policy."
+        )
+    return f"No premiums due for {ins.get('label', 'this month')}."
+
+
+def _insurance_actions(ins: dict) -> list[dict]:
+    actions = []
+    if ins.get("ready_count", 0) > 0:
+        actions.append(
+            {
+                "label": "Post premiums",
+                "url": "insurance.post_premiums",
+                "method": "POST",
+            }
+        )
+    actions.append({"label": "Insurance", "url": "insurance.index", "method": "GET"})
     return actions
 
 
