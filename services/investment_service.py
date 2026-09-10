@@ -37,6 +37,10 @@ ASSET_LABELS = {
 # Salary-deducted — monthly post credits the holding without debiting a bank account
 NON_CASH_ASSET_TYPES = frozenset({"epf"})
 NON_CASH_ACCOUNT_NAME = "Salary deduction (non-cash)"
+# Lump-sum types: source account + invested amount debits on save (not only monthly post)
+INITIAL_PURCHASE_ASSET_TYPES = frozenset(
+    {"fd", "gold", "stock", "foreign_stock", "nps", "other"}
+)
 
 
 def requires_source_account(inv_or_type: Investment | str) -> bool:
@@ -181,7 +185,7 @@ def get_portfolio_summary(*, owner: str | None = None) -> dict[str, Any]:
     }
 
 
-def create_investment(data: dict[str, Any]) -> Investment:
+def create_investment(data: dict[str, Any]) -> tuple[Investment, bool]:
     # New holdings are always active — deactivate later from Edit if needed
     data = dict(data)
     data["is_active"] = "1"
@@ -192,15 +196,17 @@ def create_investment(data: dict[str, Any]) -> Investment:
     _maybe_value_gold(inv, data)
     _maybe_value_foreign_stock(inv, data)
     db.session.commit()
-    return inv
+    debited = _record_initial_purchase(inv)
+    return inv, debited
 
 
-def update_investment(inv: Investment, data: dict[str, Any]) -> Investment:
+def update_investment(inv: Investment, data: dict[str, Any]) -> tuple[Investment, bool]:
     _populate(inv, data)
     _maybe_value_gold(inv, data)
     _maybe_value_foreign_stock(inv, data)
     db.session.commit()
-    return inv
+    debited = _record_initial_purchase(inv)
+    return inv, debited
 
 
 def _maybe_value_gold(inv: Investment, data: dict[str, Any]) -> None:
@@ -561,6 +567,58 @@ def _contribution_label(inv: Investment) -> str:
         "other": "Investment",
     }
     return labels.get(inv.asset_type, "Investment")
+
+
+def _has_investment_transactions(inv_id: int) -> bool:
+    return (
+        Transaction.query.filter(
+            Transaction.investment_id == inv_id,
+            Transaction.transaction_type == "investment",
+        ).first()
+        is not None
+    )
+
+
+def _should_record_initial_purchase(inv: Investment) -> bool:
+    if inv.asset_type not in INITIAL_PURCHASE_ASSET_TYPES:
+        return False
+    if not requires_source_account(inv) or not inv.source_account_id:
+        return False
+    return Decimal(inv.invested_amount or 0) > 0
+
+
+def _record_initial_purchase(inv: Investment) -> bool:
+    """
+    Debit source account for a lump-sum deposit (FD, gold buy, etc.).
+    Skips MF/SIP — those use Post this month for recurring debits.
+    Idempotent: no-op if an investment transaction already exists for this holding.
+  """
+    if not _should_record_initial_purchase(inv) or _has_investment_transactions(inv.id):
+        return False
+
+    from services import transaction_service
+    from services.transaction_service import TransactionValidationError
+
+    amount = Decimal(inv.invested_amount or 0)
+    post_date = inv.start_date or date.today()
+    label = _contribution_label(inv)
+    try:
+        transaction_service.create_transaction(
+            {
+                "date": post_date.isoformat(),
+                "amount": str(amount),
+                "description": f"{label} — {inv.name}",
+                "transaction_type": "investment",
+                "account_id": inv.source_account_id,
+                "investment_id": inv.id,
+                "payment_mode": "transfer",
+                "skip_holding_bump": "1",
+                "notes": f"Initial {label.lower()} deposit",
+            }
+        )
+    except TransactionValidationError as exc:
+        raise InvestmentValidationError(str(exc)) from exc
+    return True
 
 
 def _populate(inv: Investment, data: dict[str, Any]) -> None:

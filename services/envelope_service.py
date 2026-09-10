@@ -477,7 +477,13 @@ def apply_envelope_entries_for_transaction(
         for eid, amount in splits:
             _credit(eid, amount, txn, entry_type="allocation")
     elif txn.transaction_type == "expense" and expense_envelope:
-        _debit(expense_envelope.id, Decimal(txn.amount or 0), txn, entry_type="spend")
+        spend_amt = (
+            Decimal(txn.household_share_amount)
+            if txn.household_share_amount is not None
+            else Decimal(txn.amount or 0)
+        )
+        if spend_amt > 0:
+            _debit(expense_envelope.id, spend_amt, txn, entry_type="spend")
         txn.envelope_id = expense_envelope.id
     elif txn.transaction_type == "refund" and expense_envelope:
         # Restore the pot that the original expense drained

@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{{ 'Edit' if friend else 'Add' }} Friend</h1>
+    <p class="page-subtitle">Name people you split lunches / trips with</p>
+  </div>
+  <a href="{{ url_for('splits.friends') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card" style="max-width:520px">
+  <form method="post" novalidate>
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="form-label" for="name">Name</label>
+        <input type="text" class="form-control" id="name" name="name" required maxlength="120"
+               value="{{ form_data.get('name', '') }}" placeholder="e.g. Rahul">
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="notes">Notes</label>
+        <textarea class="form-control" id="notes" name="notes" rows="2"
+                  placeholder="Optional">{{ form_data.get('notes', '') }}</textarea>
+      </div>
+      {% if friend %}
+      <div class="col-12">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1"
+                 {% if form_data.get('is_active', '1') in ['1', 'true', 'on'] %}checked{% endif %}>
+          <label class="form-check-label" for="is_active">Active</label>
+        </div>
+      </div>
+      {% endif %}
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-check-lg me-1"></i> Save
+        </button>
+        <a href="{{ url_for('splits.friends') }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

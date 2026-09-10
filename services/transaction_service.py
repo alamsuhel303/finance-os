@@ -50,11 +50,14 @@ def apply_transaction_to_balances(txn: Transaction, reverse: bool = False) -> No
                 raise TransactionValidationError("Destination account not found.")
             _apply_balance_delta(destination, Decimal(txn.amount or 0) * factor)
 
-    _apply_investment_installment(txn, reverse=reverse)
+    if not txn.skip_holding_bump:
+        _apply_investment_installment(txn, reverse=reverse)
 
 
 def _apply_investment_installment(txn: Transaction, *, reverse: bool = False) -> None:
     """Bump invested/current when an investment txn is linked to a holding."""
+    if txn.skip_holding_bump:
+        return
     if txn.transaction_type != "investment" or not txn.investment_id:
         return
     inv = db.session.get(Investment, txn.investment_id)
@@ -84,16 +87,35 @@ def _expense_warnings(
 
 
 def create_transaction(data: Any) -> tuple[Transaction, str | None]:
+    from services import split_service
+    from services.split_service import SplitValidationError
+
     try:
         splits, expense_env = _prepare_envelope_side_effects(data)
         amount = parse_amount(data.get("amount"))
+        split_payload = None
+        txn_type = (data.get("transaction_type") or "expense").strip().lower()
+        if txn_type == "expense":
+            split_payload = split_service.parse_split_payload(data)
+            if split_payload is not None:
+                if amount is None:
+                    raise TransactionValidationError(
+                        "Enter a valid amount greater than zero."
+                    )
+                split_service.validate_split_against_total(split_payload, amount)
+
+        warn_amount = amount
+        if split_payload is not None:
+            warn_amount = Decimal(split_payload["household_share"])
         warning = _expense_warnings(
             data,
             expense_env,
-            amount,
-            txn_type=(data.get("transaction_type") or "expense"),
+            warn_amount,
+            txn_type=txn_type,
         )
         txn = _build_transaction(data)
+        if split_payload is not None:
+            txn.household_share_amount = Decimal(split_payload["household_share"])
         _ensure_sufficient_funds(txn)
         db.session.add(txn)
         db.session.flush()
@@ -103,27 +125,50 @@ def create_transaction(data: Any) -> tuple[Transaction, str | None]:
             splits=splits,
             expense_envelope=expense_env,
         )
+        if txn_type == "expense":
+            split_service.sync_split_for_transaction(txn, split_payload)
         db.session.commit()
         return txn, warning
-    except EnvelopeValidationError as exc:
+    except (EnvelopeValidationError, SplitValidationError) as exc:
         db.session.rollback()
         raise TransactionValidationError(str(exc)) from exc
 
 
 def update_transaction(txn: Transaction, data: Any) -> tuple[Transaction, str | None]:
+    from services import split_service
+    from services.split_service import SplitValidationError
+
     try:
         splits, expense_env = _prepare_envelope_side_effects(data)
         amount = parse_amount(data.get("amount"))
+        split_payload = None
+        txn_type = (data.get("transaction_type") or "expense").strip().lower()
+        if txn_type == "expense":
+            split_payload = split_service.parse_split_payload(data)
+            if split_payload is not None:
+                if amount is None:
+                    raise TransactionValidationError(
+                        "Enter a valid amount greater than zero."
+                    )
+                split_service.validate_split_against_total(split_payload, amount)
+
+        warn_amount = amount
+        if split_payload is not None:
+            warn_amount = Decimal(split_payload["household_share"])
         # After reverse, balance is restored — warn against that restored balance
         envelope_service.reverse_envelope_entries_for_transaction(txn)
         warning = _expense_warnings(
             data,
             expense_env,
-            amount,
-            txn_type=(data.get("transaction_type") or "expense"),
+            warn_amount,
+            txn_type=txn_type,
         )
         apply_transaction_to_balances(txn, reverse=True)
         _populate_transaction(txn, data)
+        if split_payload is not None:
+            txn.household_share_amount = Decimal(split_payload["household_share"])
+        elif txn_type != "expense":
+            txn.household_share_amount = None
         _ensure_sufficient_funds(txn)
         apply_transaction_to_balances(txn)
         envelope_service.apply_envelope_entries_for_transaction(
@@ -131,9 +176,13 @@ def update_transaction(txn: Transaction, data: Any) -> tuple[Transaction, str | 
             splits=splits,
             expense_envelope=expense_env,
         )
+        if txn_type == "expense":
+            split_service.sync_split_for_transaction(txn, split_payload)
+        else:
+            split_service.sync_split_for_transaction(txn, None)
         db.session.commit()
         return txn, warning
-    except EnvelopeValidationError as exc:
+    except (EnvelopeValidationError, SplitValidationError) as exc:
         db.session.rollback()
         raise TransactionValidationError(str(exc)) from exc
 
@@ -157,10 +206,24 @@ def _ensure_sufficient_funds(txn: Transaction) -> None:
 
 
 def delete_transaction(txn: Transaction) -> None:
+    from services import split_service
+    from services.split_service import SplitValidationError
+
+    try:
+        split_service.undo_settlements_for_transaction(txn)
+        split_service.delete_split_for_transaction(txn)
+        _delete_transaction_core(txn)
+        db.session.commit()
+    except SplitValidationError as exc:
+        db.session.rollback()
+        raise TransactionValidationError(str(exc)) from exc
+
+
+def _delete_transaction_core(txn: Transaction) -> None:
+    """Remove txn ledger effects and row (no split/settlement handling)."""
     envelope_service.reverse_envelope_entries_for_transaction(txn)
     apply_transaction_to_balances(txn, reverse=True)
     db.session.delete(txn)
-    db.session.commit()
 
 
 def _prepare_envelope_side_effects(data: Any):
@@ -430,6 +493,12 @@ def _populate_transaction(txn: Transaction, data: Any) -> None:
         txn.investment_id = None
 
     txn.skip_cash_impact = str(data.get("skip_cash_impact", "")).lower() in (
+        "1",
+        "true",
+        "on",
+        "yes",
+    )
+    txn.skip_holding_bump = str(data.get("skip_holding_bump", "")).lower() in (
         "1",
         "true",
         "on",

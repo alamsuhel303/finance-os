@@ -209,13 +209,26 @@ def refresh_navs():
             fx_bit = f" · USD/INR {fx:.2f}" if fx is not None else ""
             parts.append(f"{foreign['updated_count']} foreign stock{fx_bit}")
         flash(
-            f"Updated market value for {' + '.join(parts)}.",
+            f"Updated market value for {' + '.join(parts)}."
+            + (
+                f" ({result.get('scheme_count', 0)} funds"
+                f"{' · AMFI bulk' if result.get('amfi_bulk_count') else ''}"
+                f" · {result.get('elapsed_sec', 0)}s)"
+                if result.get("scheme_count")
+                else ""
+            ),
             "success",
         )
     elif eligible == 0:
         flash(
             "Nothing to refresh yet. Add mutual-fund scheme+units, gold grams, or foreign ticker+shares.",
             "info",
+        )
+    elif errors and updated == 0 and gold["updated_count"] == 0 and foreign["updated_count"] == 0:
+        flash(
+            "Could not refresh — fund API (mfapi.in) may be down or rate-limited. "
+            "Try again in a minute.",
+            "danger",
         )
     elif errors:
         flash("Value refresh had errors — see details.", "danger")
@@ -281,8 +294,11 @@ def create():
     ctx = _form_context()
     if request.method == "POST":
         try:
-            inv = investment_service.create_investment(_form_payload())
-            flash(f"Added investment: {inv.name}", "success")
+            inv, debited = investment_service.create_investment(_form_payload())
+            msg = f"Added investment: {inv.name}"
+            if debited:
+                msg += " — debited source account and logged transaction."
+            flash(msg, "success")
             return redirect(url_for("investments.index", edit=1))
         except InvestmentValidationError as exc:
             flash(str(exc), "danger")
@@ -320,8 +336,11 @@ def edit(inv_id: int):
     ctx = _form_context()
     if request.method == "POST":
         try:
-            investment_service.update_investment(inv, _form_payload())
-            flash(f"Updated {inv.name}.", "success")
+            inv, debited = investment_service.update_investment(inv, _form_payload())
+            msg = f"Updated {inv.name}."
+            if debited:
+                msg += " Debited source account and logged initial deposit."
+            flash(msg, "success")
             return redirect(url_for("investments.index", edit=1))
         except InvestmentValidationError as exc:
             flash(str(exc), "danger")

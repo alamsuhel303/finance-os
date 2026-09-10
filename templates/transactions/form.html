@@ -126,6 +126,78 @@
         <div class="envelope-mismatch-hint" id="envelopeMismatchHint" role="status"></div>
       </div>
 
+      {# —— Friend expense split (expenses only) —— #}
+      <div class="col-12 expense-only-fields {% if form_data.get('transaction_type', 'expense') != 'expense' %}hidden{% endif %}" id="friendSplitSection">
+        <div class="section-divider mb-2">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="split_enabled" name="split_enabled" value="1"
+                   {% if split_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="split_enabled">
+              <strong>Split with friends</strong>
+            </label>
+          </div>
+          <p class="form-text mb-0 mt-1">
+            Debit the full bill from the account. Only <em>your share</em> hits envelope &amp; budget.
+            Friends’ shares stay as money owed until you record a settlement.
+            <a href="{{ url_for('splits.friends') }}">Manage friends</a>
+          </p>
+        </div>
+        <div id="friendSplitFields" class="{% if not split_enabled %}hidden{% endif %}">
+          <div class="row g-2 mb-2 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label" for="split_household_share">Your share (₹)</label>
+              <input type="number" step="0.01" min="0" class="form-control" id="split_household_share"
+                     name="split_household_share"
+                     value="{{ form_data.get('split_household_share', '') }}" placeholder="0.00">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label" for="split_household_parts">Parts</label>
+              <input type="number" step="1" min="0" class="form-control" id="split_household_parts"
+                     inputmode="numeric" placeholder="e.g. 2">
+            </div>
+            <div class="col-md-5">
+              <button type="button" class="btn btn-ghost btn-sm" id="equalSplitBtn">Equal</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="applyPartsBtn">Apply parts</button>
+              <div class="form-text mb-0">Parts example: you 2 · friend 1 · friend 1 → halves yours, quarters each</div>
+            </div>
+            <div class="col-md-2 text-md-end">
+              <button type="button" class="btn btn-ghost btn-sm" id="addFriendSplitRow">
+                <i class="bi bi-plus-lg"></i> Add friend
+              </button>
+            </div>
+          </div>
+          <div id="friendSplitRows">
+            {% for row in friend_split_rows or [] %}
+              <div class="row g-2 mb-2 friend-split-row">
+                <div class="col-md-5">
+                  <select class="form-select" name="split_friend_id">
+                    <option value="">Friend</option>
+                    {% for f in friends %}
+                      <option value="{{ f.id }}" {% if row.friend_id|string == f.id|string %}selected{% endif %}>{{ f.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <input type="number" step="0.01" min="0" class="form-control" name="split_friend_amount"
+                         value="{{ row.amount }}" placeholder="Amount ₹">
+                </div>
+                <div class="col-md-3">
+                  <input type="number" step="1" min="0" class="form-control" name="split_friend_parts"
+                         inputmode="numeric" placeholder="Parts">
+                </div>
+                <div class="col-md-1">
+                  <button type="button" class="btn-icon remove-friend-split" title="Remove"><i class="bi bi-x-lg"></i></button>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="stat-meta mb-2" id="friendSplitSummary"></div>
+          <label class="form-label" for="split_notes">Split notes</label>
+          <input type="text" class="form-control" id="split_notes" name="split_notes"
+                 value="{{ form_data.get('split_notes', '') }}" placeholder="Optional">
+        </div>
+      </div>
+
       <div class="col-12 transfer-fields {% if form_data.get('transaction_type') != 'transfer' %}hidden{% endif %}" id="splitSection">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <div>
@@ -248,6 +320,28 @@
     </div>
   </div>
 </template>
+
+<template id="friendSplitRowTemplate">
+  <div class="row g-2 mb-2 friend-split-row">
+    <div class="col-md-5">
+      <select class="form-select" name="split_friend_id">
+        <option value="">Friend</option>
+        {% for f in friends %}
+          <option value="{{ f.id }}">{{ f.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <input type="number" step="0.01" min="0" class="form-control" name="split_friend_amount" placeholder="Amount ₹">
+    </div>
+    <div class="col-md-3">
+      <input type="number" step="1" min="0" class="form-control" name="split_friend_parts" inputmode="numeric" placeholder="Parts">
+    </div>
+    <div class="col-md-1">
+      <button type="button" class="btn-icon remove-friend-split" title="Remove"><i class="bi bi-x-lg"></i></button>
+    </div>
+  </div>
+</template>
 {% endblock %}
 
 {% block scripts %}
@@ -260,5 +354,5 @@
   };
 </script>
 <script src="{{ url_for('static', filename='js/amount-words.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='js/transactions.js') }}?v=9"></script>
+<script src="{{ url_for('static', filename='js/transactions.js') }}?v=11"></script>
 {% endblock %}

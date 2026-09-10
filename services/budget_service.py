@@ -25,8 +25,13 @@ STATUS_OVER = "over"  # >= 100%
 STATUS_NONE = "none"  # no budget set
 
 # Signed contribution to budget "spent": expenses +, refunds −
+# Split expenses count only household_share_amount toward budget.
 _BUDGET_SIGNED_AMOUNT = case(
     (Transaction.transaction_type == "refund", -Transaction.amount),
+    (
+        Transaction.household_share_amount.isnot(None),
+        Transaction.household_share_amount,
+    ),
     else_=Transaction.amount,
 )
 

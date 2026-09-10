@@ -1,0 +1,135 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Split detail</h1>
+    <p class="page-subtitle">
+      {% if split.transaction %}
+        {{ split.transaction.description }} · {{ split.transaction.date.strftime('%d %b %Y') }}
+      {% else %}
+        Bill split
+      {% endif %}
+    </p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('splits.index') }}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+    {% if split.transaction %}
+      <a href="{{ url_for('transactions.edit', txn_id=split.transaction_id) }}" class="btn btn-ghost">Edit expense</a>
+    {% endif %}
+    {% if split.outstanding_total > 0 %}
+      <a href="{{ url_for('splits.settle', split_id=split.id) }}" class="btn btn-accent">Record settlement</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Bill total</div>
+      <div class="stat-value">{{ split.total_amount | inr }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Your share</div>
+      <div class="stat-value">{{ split.household_share | inr }}</div>
+      <div class="stat-meta">Envelope / budget</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Still owed</div>
+      <div class="stat-value stat-accent">{{ split.outstanding_total | inr }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Status</div>
+      <div class="stat-value" style="font-size:1.25rem">{{ split.status | capitalize }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card mb-4">
+  <h2 class="section-title">Shares</h2>
+  <div class="table-wrap">
+    <table class="fos-table">
+      <thead>
+        <tr>
+          <th>Who</th>
+          <th>Share</th>
+          <th>Settled</th>
+          <th>Outstanding</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for share in split.shares %}
+          <tr>
+            <td>
+              {% if share.is_household %}
+                Household (you)
+              {% else %}
+                {{ share.friend.name if share.friend else 'Friend' }}
+              {% endif %}
+            </td>
+            <td class="amount-cell">{{ share.amount | inr }}</td>
+            <td class="amount-cell">{{ share.settled_amount | inr }}</td>
+            <td class="amount-cell">{{ share.outstanding | inr }}</td>
+            <td><span class="badge-type badge-investment">{{ share.status }}</span></td>
+            <td class="text-end">
+              {% if not share.is_household and share.outstanding > 0 %}
+                <a href="{{ url_for('splits.settle', friend_id=share.friend_id, split_id=split.id, amount=share.outstanding) }}"
+                   class="btn btn-ghost btn-sm">Settle</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="glass-card">
+  <h2 class="section-title">Settlements</h2>
+  {% if split.settlements %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Friend</th>
+            <th>Into account</th>
+            <th>Amount</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in split.settlements %}
+            <tr>
+              <td>{{ s.date.strftime('%d %b %Y') }}</td>
+              <td>{{ s.friend.name if s.friend else '—' }}</td>
+              <td>{{ s.account.name if s.account else '—' }}</td>
+              <td class="amount-cell stat-positive">{{ s.amount | inr }}</td>
+              <td class="stat-meta">{{ s.notes or '—' }}</td>
+              <td class="text-end">
+                <form method="post" action="{{ url_for('splits.settlement_undo', settlement_id=s.id) }}"
+                      onsubmit="return confirm('Undo this settlement? Cash credit will be removed and the friend will owe again.');">
+                  <button type="submit" class="btn btn-ghost btn-sm">Undo</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state py-3"><div>No settlements yet</div></div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -106,6 +106,7 @@ class TelegramPendingTransaction(db.Model):
     transaction_date = db.Column(db.Date, nullable=False)
     paid_by = db.Column(db.String(20), nullable=False, default="self")
     edit_field = db.Column(db.String(40))  # awaiting text for amount/description/date
+    split_json = db.Column(db.Text)  # optional friend-split payload JSON
     status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=_utcnow)
     expires_at = db.Column(db.DateTime, nullable=False)

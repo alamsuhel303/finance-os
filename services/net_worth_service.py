@@ -86,10 +86,16 @@ def compute_live_net_worth() -> dict[str, Any]:
         (Decimal(l.outstanding_amount or 0) for l in liabilities), Decimal("0")
     )
 
-    total_assets = cash_savings + investments_total
+    from services import split_service
+
+    friends_receivable = split_service.total_friends_receivable()
+
+    total_assets = cash_savings + investments_total + friends_receivable
     net_worth = total_assets - liabilities_total
 
-    allocation = _build_allocation(accounts, investments, liabilities_total)
+    allocation = _build_allocation(
+        accounts, investments, liabilities_total, friends_receivable=friends_receivable
+    )
 
     # Breakdown UI: active + non-zero only (hides empty Emergency/Home/Travel funds)
     display_accounts = [
@@ -101,6 +107,7 @@ def compute_live_net_worth() -> dict[str, Any]:
         "investments": investments_total,
         "holdings_value": holdings_value,
         "investment_account_cash": investment_account_cash,
+        "friends_receivable": friends_receivable,
         "liabilities": liabilities_total,
         "total_assets": total_assets,
         "net_worth": net_worth,
@@ -115,6 +122,8 @@ def _build_allocation(
     accounts: list[Account],
     investments: list[Investment],
     liabilities_total: Decimal,
+    *,
+    friends_receivable: Decimal = Decimal("0"),
 ) -> list[dict[str, Any]]:
     buckets: dict[str, float] = {}
 
@@ -139,6 +148,9 @@ def _build_allocation(
             "gold": "Gold",
         }.get(inv.asset_type, "Other Investments")
         buckets[label] = buckets.get(label, 0.0) + float(inv.current_value or 0)
+
+    if friends_receivable > 0:
+        buckets["Friends owe"] = float(friends_receivable)
 
     if liabilities_total > 0:
         buckets["Loans (liability)"] = -float(liabilities_total)

@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Friends</h1>
+    <p class="page-subtitle">People you split bills with</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('splits.index') }}" class="btn btn-ghost">
+      <i class="bi bi-arrow-left me-1"></i> Splits
+    </a>
+    <a href="{{ url_for('splits.friend_create') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Add Friend
+    </a>
+  </div>
+</div>
+
+<div class="glass-card">
+  {% if friends %}
+    <div class="table-wrap">
+      <table class="fos-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Notes</th>
+            <th>Outstanding</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for friend in friends %}
+            <tr {% if not friend.is_active %}style="opacity:0.55"{% endif %}>
+              <td class="desc-cell">{{ friend.name }}</td>
+              <td class="stat-meta">{{ friend.notes or '—' }}</td>
+              <td class="amount-cell">{{ (balances.get(friend.id) or 0) | inr }}</td>
+              <td>
+                {% if friend.is_active %}
+                  <span class="badge-type badge-income">Active</span>
+                {% else %}
+                  <span class="badge-type badge-expense">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('splits.friend_edit', friend_id=friend.id) }}" class="btn-icon" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                {% if friend.is_active %}
+                  <form method="post" action="{{ url_for('splits.friend_deactivate', friend_id=friend.id) }}" class="d-inline"
+                        onsubmit="return confirm('Deactivate {{ friend.name }}?');">
+                    <button type="submit" class="btn-icon" title="Deactivate" style="color: var(--danger)">
+                      <i class="bi bi-person-dash"></i>
+                    </button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-people"></i>
+      <div>No friends yet</div>
+      <a href="{{ url_for('splits.friend_create') }}" class="btn btn-accent mt-3">Add Friend</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

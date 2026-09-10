@@ -71,6 +71,12 @@ HELP_TEXT = "\n".join(
         code("/add 1200 groceries"),
         code("/add 2500 headphones personal"),
         "",
+        bold("Split with friends"),
+        "(only when you include the word split)",
+        code("/add 2000 dinner split equal Rahul Priya"),
+        code("/add 2000 dinner split Rahul 500 Priya 500"),
+        code("/add 2000 dinner split parts me 2 Rahul 1 Priya 1"),
+        "",
         bold("Or plain text"),
         "• 850 dinner",
         "• Spent 850 at Zomato for dinner",
@@ -88,6 +94,7 @@ HELP_TEXT = "\n".join(
         f"{code('/unlink')} — unlink this account",
         "",
         italic("Every expense asks for Confirm before saving."),
+        italic("Add friends in the web app under Splits → Friends first."),
     ]
 )
 

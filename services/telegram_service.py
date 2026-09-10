@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 import string
@@ -297,9 +298,27 @@ def create_pending(
     txn_date: date,
     paid_by: str,
     merchant: str | None = None,
+    split_payload: dict[str, Any] | None = None,
 ) -> TelegramPendingTransaction:
     ttl = int(current_app.config.get("TELEGRAM_PENDING_TTL_MINUTES", 60))
     expires = _utcnow() + timedelta(minutes=ttl)
+    split_json = (
+        json.dumps(
+            {
+                "household_share": str(split_payload["household_share"]),
+                "friends": [
+                    {
+                        "friend_id": int(f["friend_id"]),
+                        "amount": str(f["amount"]),
+                    }
+                    for f in split_payload["friends"]
+                ],
+                "notes": split_payload.get("notes"),
+            }
+        )
+        if split_payload
+        else None
+    )
 
     # Reuse draft for the same inbox message (restart / redelivery safe)
     existing = None
@@ -325,6 +344,7 @@ def create_pending(
                 paid_by if paid_by in Transaction.PAID_BY_CHOICES else user.owner
             )
             existing.edit_field = None
+            existing.split_json = split_json
             existing.expires_at = expires
             existing.confirmed_transaction_id = None
             db.session.commit()
@@ -349,6 +369,7 @@ def create_pending(
         account_id=account_id,
         transaction_date=txn_date,
         paid_by=paid_by if paid_by in Transaction.PAID_BY_CHOICES else user.owner,
+        split_json=split_json,
         status="pending",
         expires_at=expires,
     )
@@ -457,6 +478,25 @@ def confirm_pending(pending: TelegramPendingTransaction, telegram_user_id: int) 
         "source": "telegram",
         "telegram_message_id": msg_id,
     }
+    if pending.split_json:
+        from services import split_service
+
+        try:
+            raw = json.loads(pending.split_json)
+            split_payload = {
+                "household_share": Decimal(str(raw["household_share"])),
+                "friends": [
+                    {
+                        "friend_id": int(f["friend_id"]),
+                        "amount": Decimal(str(f["amount"])),
+                    }
+                    for f in raw.get("friends") or []
+                ],
+                "notes": raw.get("notes"),
+            }
+            payload.update(split_service.payload_to_form_fields(split_payload))
+        except Exception as exc:
+            raise TelegramServiceError(f"Invalid split on draft: {exc}") from exc
 
     try:
         txn, _warning = transaction_service.create_transaction(payload)
@@ -738,6 +778,23 @@ def pending_summary_lines(pending: TelegramPendingTransaction) -> str:
             f"📅 Date · {code(pending.transaction_date.isoformat())}",
         ]
     )
+    if pending.split_json:
+        try:
+            from models import Friend
+
+            raw = json.loads(pending.split_json)
+            hh = Decimal(str(raw.get("household_share") or 0))
+            body.append("")
+            body.append(bold("Split with friends"))
+            body.append(f"🏠 Your share · {money(hh, sym)}")
+            for f in raw.get("friends") or []:
+                friend = db.session.get(Friend, int(f["friend_id"]))
+                name = friend.name if friend else f"#{f['friend_id']}"
+                body.append(
+                    f"👥 {esc(name)} owes · {money(Decimal(str(f['amount'])), sym)}"
+                )
+        except Exception:
+            body.append(italic("Split details attached"))
     return card("New transaction", body, italic("Confirm to save to Finance OS"))
 
 

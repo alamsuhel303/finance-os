@@ -114,6 +114,12 @@
               {% if txn.need_want != 'n/a' %}
                 <span class="badge-need">{{ txn.need_want }}</span>
               {% endif %}
+              {% if txn.expense_split %}
+                <a href="{{ url_for('splits.detail', split_id=txn.expense_split.id) }}"
+                   class="badge-type badge-investment" title="Split bill">
+                  Split · your {{ txn.household_share_amount | inr }}
+                </a>
+              {% endif %}
             </td>
             <td><span class="badge-type badge-{{ txn.transaction_type }}">{{ txn.transaction_type }}</span></td>
             <td>
@@ -164,6 +170,20 @@
             </td>
           </tr>
           {% endfor %}
+          {% if filter_account and running_balances is not none
+               and not filters.q and not filters.type and not filters.category
+               and not filters.paid_by and not filters.from and not filters.to
+               and pagination.page == pagination.pages %}
+          <tr class="opening-balance-row">
+            <td colspan="7">
+              <div class="desc-cell">Opening balance</div>
+              <div class="stat-meta">Baseline for this account · Statement wizard adjusts this (not a transaction)</div>
+            </td>
+            <td class="text-end amount-cell">{{ filter_account.opening_balance | inr }}</td>
+            <td class="text-end amount-cell running-balance">{{ filter_account.opening_balance | inr }}</td>
+            <td></td>
+          </tr>
+          {% endif %}
         </tbody>
       </table>
     </div>
@@ -188,7 +208,16 @@
   {% else %}
     <div class="empty-state">
       <i class="bi bi-inbox d-block"></i>
-      <p class="mb-2">No transactions match your filters.</p>
+      {% if filter_account and not filters.q and not filters.type and not filters.category and not filters.paid_by and not filters.from and not filters.to %}
+        <p class="mb-1">No transactions yet on <strong>{{ filter_account.name }}</strong>.</p>
+        <p class="stat-meta mb-2">
+          Opening balance {{ filter_account.opening_balance | inr }}
+          · Current {{ filter_account.current_balance | inr }}
+          <br>Statement wizard only changes opening — it does not add salary or other rows.
+        </p>
+      {% else %}
+        <p class="mb-2">No transactions match your filters.</p>
+      {% endif %}
       <a href="{{ url_for('transactions.create', **request.args) }}" class="btn btn-accent btn-sm">Add Transaction</a>
     </div>
   {% endif %}

@@ -75,11 +75,16 @@ class Transaction(db.Model):
     )
     # False for salary-deducted contributions (EPF) — no bank account debit
     skip_cash_impact = db.Column(db.Boolean, nullable=False, default=False)
+    # True when cash moves but holding totals were set on the form (e.g. new FD)
+    skip_holding_bump = db.Column(db.Boolean, nullable=False, default=False)
 
     # Origin channel — web UI, Telegram bot, or Excel import
     source = db.Column(db.String(20), nullable=False, default="web", index=True)
     # Soft link to inbox row (no FK — avoids circular create with telegram_messages)
     telegram_message_id = db.Column(db.Integer, nullable=True, index=True)
+
+    # When set (split expense): envelope + budget use this; cash still uses amount
+    household_share_amount = db.Column(db.Numeric(14, 2), nullable=True)
 
     created_at = db.Column(db.DateTime, nullable=False, default=_utcnow)
     updated_at = db.Column(
@@ -112,6 +117,12 @@ class Transaction(db.Model):
         lazy="dynamic",
         cascade="all, delete-orphan",
     )
+    expense_split = db.relationship(
+        "ExpenseSplit",
+        back_populates="transaction",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         db.CheckConstraint("amount > 0", name="ck_transaction_amount_positive"),
@@ -120,6 +131,13 @@ class Transaction(db.Model):
 
     def __repr__(self) -> str:
         return f"<Transaction {self.id} {self.transaction_type} {self.amount}>"
+
+    @property
+    def budget_amount(self) -> Decimal:
+        """Amount that counts toward envelope/budget (household share when split)."""
+        if self.household_share_amount is not None:
+            return Decimal(self.household_share_amount or 0)
+        return Decimal(self.amount or 0)
 
     @property
     def signed_amount(self) -> Decimal:

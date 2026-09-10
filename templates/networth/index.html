@@ -30,7 +30,7 @@
     <div class="glass-card stat-card">
       <div class="stat-label">Total Assets</div>
       <div class="stat-value stat-positive">{{ live.total_assets | inr }}</div>
-      <div class="stat-meta">Cash {{ live.cash_savings | inr }} · Invest {{ live.investments | inr }}</div>
+      <div class="stat-meta">Cash {{ live.cash_savings | inr }} · Invest {{ live.investments | inr }}{% if live.friends_receivable %} · Friends {{ live.friends_receivable | inr }}{% endif %}</div>
     </div>
   </div>
   <div class="col-6 col-xl-3">
@@ -120,6 +120,15 @@
       {% else %}
         <div class="empty-state py-3"><div>No active cash balances</div></div>
       {% endfor %}
+      {% if live.friends_receivable and live.friends_receivable > 0 %}
+        <div class="account-row">
+          <div>
+            <div class="account-name">Friends owe</div>
+            <div class="account-type">Open split receivables · <a href="{{ url_for('splits.index') }}">Splits</a></div>
+          </div>
+          <div class="amount-cell">{{ live.friends_receivable | inr }}</div>
+        </div>
+      {% endif %}
       <div class="stat-meta mt-3">Total cash {{ live.cash_savings | inr }}</div>
     </div>
   </div>
