@@ -12,6 +12,7 @@ from routes.networth import networth_bp
 from routes.reports import reports_bp
 from routes.settings import settings_bp
 from routes.setup import setup_bp
+from routes.splits import splits_bp
 from routes.transactions import transactions_bp
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "networth_bp",
     "insurance_bp",
     "setup_bp",
+    "splits_bp",
 ]
 

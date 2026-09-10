@@ -66,6 +66,7 @@ def _register_blueprints(app: Flask) -> None:
         reports_bp,
         settings_bp,
         setup_bp,
+        splits_bp,
         transactions_bp,
     )
 
@@ -82,6 +83,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(networth_bp)
     app.register_blueprint(insurance_bp)
     app.register_blueprint(setup_bp)
+    app.register_blueprint(splits_bp)
 
 
 def _register_setup_guard(app: Flask) -> None:
@@ -132,6 +134,7 @@ def _register_template_helpers(app: Flask) -> None:
                 {"id": "dashboard", "label": "Dashboard", "icon": "bi-grid-1x2", "endpoint": "dashboard.index", "ready": True},
                 {"id": "checklist", "label": "Month", "icon": "bi-calendar-check", "endpoint": "checklist.index", "ready": True},
                 {"id": "transactions", "label": "Transactions", "icon": "bi-arrow-left-right", "endpoint": "transactions.list_transactions", "ready": True},
+                {"id": "splits", "label": "Splits", "icon": "bi-people", "endpoint": "splits.index", "ready": True},
                 {"id": "accounts", "label": "Accounts", "icon": "bi-wallet2", "endpoint": "accounts.index", "ready": True},
                 {"id": "envelopes", "label": "Envelopes", "icon": "bi-envelope", "endpoint": "envelopes.index", "ready": True},
                 {"id": "budget", "label": "Budget", "icon": "bi-pie-chart", "endpoint": "budget.index", "ready": True},

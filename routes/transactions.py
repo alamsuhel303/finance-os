@@ -76,7 +76,7 @@ def _form_context():
         .order_by(Investment.sort_order, Investment.name)
         .all()
     )
-    from services import envelope_service, profile_service
+    from services import envelope_service, profile_service, split_service
 
     spend_account = envelope_service.resolve_envelope_cash_account()
     my_account = next(
@@ -93,6 +93,7 @@ def _form_context():
         "categories": categories,
         "envelopes": envelopes,
         "investments": investments,
+        "friends": split_service.list_friends(active_only=True),
         "transaction_types": Transaction.TRANSACTION_TYPES,
         "payment_modes": Transaction.PAYMENT_MODES,
         "paid_by_choices": Transaction.PAID_BY_CHOICES,
@@ -215,6 +216,12 @@ def create():
         form_data=form_data,
         list_filters=list_filters,
         split_rows=_split_rows_from_form(request.form) if request.method == "POST" else [],
+        friend_split_rows=_friend_split_rows_from_form(request.form)
+        if request.method == "POST"
+        else [],
+        split_enabled=bool(request.form.get("split_enabled"))
+        if request.method == "POST"
+        else False,
         currency=current_app.config["CURRENCY_SYMBOL"],
         page_title="Add Transaction",
         active_nav="transactions",
@@ -244,6 +251,8 @@ def edit(txn_id: int):
     if request.method == "POST":
         form_data = request.form
         split_rows = _split_rows_from_form(request.form)
+        friend_split_rows = _friend_split_rows_from_form(request.form)
+        split_enabled = bool(request.form.get("split_enabled"))
     else:
         form_data = {
             "date": txn.date.isoformat(),
@@ -260,11 +269,31 @@ def edit(txn_id: int):
             "notes": txn.notes or "",
             "envelope_id": txn.envelope_id or "",
             "investment_id": txn.investment_id or "",
+            "split_household_share": str(txn.household_share_amount)
+            if txn.household_share_amount is not None
+            else "",
+            "split_notes": "",
         }
         split_rows = [
             {"envelope_id": e.envelope_id, "amount": str(e.amount)}
             for e in txn.envelope_entries.filter_by(entry_type="allocation").all()
         ]
+        from services import split_service
+
+        existing = split_service.get_split_for_transaction(txn.id)
+        split_enabled = existing is not None
+        friend_split_rows = []
+        if existing:
+            form_data["split_household_share"] = str(existing.household_share)
+            form_data["split_notes"] = existing.notes or ""
+            friend_split_rows = [
+                {
+                    "friend_id": s.friend_id,
+                    "amount": str(s.amount),
+                }
+                for s in existing.shares
+                if not s.is_household
+            ]
 
     return render_template(
         "transactions/form.html",
@@ -272,6 +301,8 @@ def edit(txn_id: int):
         form_data=form_data,
         list_filters=list_filters,
         split_rows=split_rows,
+        friend_split_rows=friend_split_rows,
+        split_enabled=split_enabled,
         currency=current_app.config["CURRENCY_SYMBOL"],
         page_title="Edit Transaction",
         active_nav="transactions",
@@ -287,8 +318,19 @@ def delete(txn_id: int):
         return _redirect_to_list()
 
     description = txn.description
-    transaction_service.delete_transaction(txn)
-    flash(f"Transaction “{description}” deleted.", "success")
+    had_settlements = bool(
+        txn.expense_split and txn.expense_split.settlements
+    )
+    try:
+        transaction_service.delete_transaction(txn)
+    except TransactionValidationError as exc:
+        flash(str(exc), "danger")
+        return _redirect_to_list()
+
+    msg = f"Transaction “{description}” deleted."
+    if had_settlements:
+        msg += " Linked friend settlements were reversed."
+    flash(msg, "success")
     return _redirect_to_list()
 
 
@@ -415,4 +457,16 @@ def _split_rows_from_form(form) -> list[dict]:
     for eid, amt in zip(env_ids, amounts):
         if str(eid or "").strip() or str(amt or "").strip():
             rows.append({"envelope_id": eid, "amount": amt})
+    return rows
+
+
+def _friend_split_rows_from_form(form) -> list[dict]:
+    if not hasattr(form, "getlist"):
+        return []
+    friend_ids = form.getlist("split_friend_id")
+    amounts = form.getlist("split_friend_amount")
+    rows = []
+    for fid, amt in zip(friend_ids, amounts):
+        if str(fid or "").strip() or str(amt or "").strip():
+            rows.append({"friend_id": fid, "amount": amt})
     return rows

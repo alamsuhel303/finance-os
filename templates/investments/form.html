@@ -215,7 +215,13 @@
             {% endif %}
           {% endfor %}
         </select>
-        <div class="form-text">Cash account to debit when posting</div>
+        <div class="form-text type-hint" data-for="fd,gold,stock,foreign_stock,nps,other">
+          Debits this account when you save (lump-sum deposit). Also used for monthly post.
+        </div>
+        <div class="form-text type-hint" data-for="mutual_fund,sip">
+          Cash account to debit when you click <strong>Post this month</strong>.
+        </div>
+        <div class="form-text type-hint" data-for="epf">Not used — EPF is salary-deducted.</div>
       </div>
       <div class="col-md-4 d-flex align-items-end form-section" data-show="mutual_fund,sip,epf,nps,fd,other">
         <div class="form-check mb-2">

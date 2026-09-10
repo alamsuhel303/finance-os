@@ -24,6 +24,11 @@ ADDITIVE_COLUMNS = {
         ("skip_cash_impact", "BOOLEAN DEFAULT 0 NOT NULL"),
         ("source", "VARCHAR(20) DEFAULT 'web' NOT NULL"),
         ("telegram_message_id", "INTEGER"),
+        ("household_share_amount", "NUMERIC(14, 2)"),
+        ("skip_holding_bump", "BOOLEAN DEFAULT 0 NOT NULL"),
+    ],
+    "telegram_pending_transactions": [
+        ("split_json", "TEXT"),
     ],
     "investments": [
         ("sip_day", "INTEGER"),
@@ -40,6 +45,9 @@ ADDITIVE_COLUMNS = {
         ("premium_paying_term_years", "INTEGER"),
         ("policy_term_years", "INTEGER"),
         ("source_account_id", "INTEGER REFERENCES accounts(id)"),
+    ],
+    "expense_split_settlements": [
+        ("share_allocations", "TEXT"),
     ],
 }
 

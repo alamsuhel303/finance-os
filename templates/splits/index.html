@@ -1,0 +1,125 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Splits</h1>
+    <p class="page-subtitle">Group bills you paid · friends’ shares until they repay</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('splits.friends') }}" class="btn btn-ghost">
+      <i class="bi bi-people me-1"></i> Friends
+    </a>
+    {% if overview.outstanding_total > 0 %}
+      <a href="{{ url_for('splits.settle') }}" class="btn btn-accent">
+        <i class="bi bi-cash-coin me-1"></i> Record settlement
+      </a>
+    {% endif %}
+    <a href="{{ url_for('transactions.create', type='expense') }}" class="btn btn-accent">
+      <i class="bi bi-plus-lg me-1"></i> Split expense
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Friends owe</div>
+      <div class="stat-value stat-accent">{{ overview.outstanding_total | inr }}</div>
+      <div class="stat-meta">Open receivables</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Open splits</div>
+      <div class="stat-value">{{ overview.open_split_count }}</div>
+      <div class="stat-meta">Bills awaiting repayment</div>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="glass-card stat-card">
+      <div class="stat-label">Active friends</div>
+      <div class="stat-value">{{ overview.friends | length }}</div>
+      <div class="stat-meta"><a href="{{ url_for('splits.friends') }}">Manage friends</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Balances</h2>
+      {% if overview.balances %}
+        {% for row in overview.balances %}
+          <div class="account-row">
+            <div>
+              <div class="account-name">{{ row.friend.name }}</div>
+              <div class="account-type">{% if row.friend.is_active %}Active{% else %}Inactive{% endif %}</div>
+            </div>
+            <div class="text-end">
+              <div class="amount-cell {% if row.outstanding > 0 %}stat-accent{% endif %}">
+                {{ row.outstanding | inr }}
+              </div>
+              {% if row.outstanding > 0 %}
+                <a href="{{ url_for('splits.settle', friend_id=row.friend.id) }}" class="stat-meta">Settle</a>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state py-3">
+          <div>No friends yet — add people you split bills with</div>
+          <a href="{{ url_for('splits.friend_create') }}" class="btn btn-accent btn-sm mt-2">Add friend</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="glass-card h-100">
+      <h2 class="section-title">Open bills</h2>
+      {% if overview.open_splits %}
+        <div class="table-wrap">
+          <table class="fos-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Total</th>
+                <th>Your share</th>
+                <th>Owed</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for split in overview.open_splits %}
+                <tr>
+                  <td>{{ split.transaction.date.strftime('%d %b') if split.transaction else '—' }}</td>
+                  <td class="desc-cell">
+                    {{ split.transaction.description if split.transaction else '—' }}
+                    <span class="badge-type badge-investment">{{ split.status }}</span>
+                  </td>
+                  <td class="amount-cell">{{ split.total_amount | inr }}</td>
+                  <td class="amount-cell">{{ split.household_share | inr }}</td>
+                  <td class="amount-cell stat-accent">{{ split.outstanding_total | inr }}</td>
+                  <td class="text-end">
+                    <a href="{{ url_for('splits.detail', split_id=split.id) }}" class="btn-icon" title="Details">
+                      <i class="bi bi-eye"></i>
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state py-3">
+          <div>No open splits</div>
+          <p class="page-subtitle mb-0 mt-1">
+            On Add Transaction → expense → enable <strong>Split with friends</strong>.
+          </p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

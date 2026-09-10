@@ -462,7 +462,7 @@ def _process_xlsx(
                     }
                 )
             else:
-                txn = create_transaction(payload)
+                txn, _warning = create_transaction({**payload, "source": "import"})
                 created_ids.append(txn.id)
                 ready += 1
         except (ImportValidationError, TransactionValidationError, Exception) as exc:

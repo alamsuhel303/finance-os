@@ -254,4 +254,29 @@ def get_month_reminders(ref: date | None = None) -> list[dict[str, Any]]:
             }
         )
 
+    from services import split_service
+
+    owed = split_service.total_friends_receivable()
+    if owed > 0:
+        balances = [b for b in split_service.friends_balances() if b["outstanding"] > 0]
+        names = ", ".join(
+            f"{b['friend'].name} ({b['outstanding']:,.0f})" for b in balances[:3]
+        )
+        more = "" if len(balances) <= 3 else f" +{len(balances) - 3} more"
+        reminders.append(
+            {
+                "key": "friends_owe",
+                "severity": "info",
+                "title": "Friends owe you",
+                "detail": f"₹{owed:,.2f} outstanding · {names}{more}",
+                "actions": [
+                    {
+                        "label": "Open Splits",
+                        "url": "splits.index",
+                        "method": "GET",
+                    }
+                ],
+            }
+        )
+
     return reminders

@@ -83,7 +83,11 @@ Use when your books don’t match the bank, without guessing “current balance�
    - implied balance on that date = your statement figure
    - transactions **after** that date still change **current**
 
-This does **not** invent transactions. Prefer this over editing current balance directly.
+This does **not** invent transactions (and does **not** post Salary). Prefer this over editing current balance directly.
+
+To see the effect: open that account’s ledger — **Opening balance** appears at the bottom of the list. Account names like “Suhel Salary” are just bank account labels, not a salary credit.
+
+To import individual bank lines as transactions, use **Transactions → Import Excel** (Preview, then Confirm).
 
 ---
 
@@ -319,6 +323,36 @@ Create a backup in Settings. Reminder returns after `BACKUP_MAX_AGE_DAYS` withou
 
 **Where is my data if I reinstall the Mac?**  
 Only where you copied it. Keep offline copies of `finance.db` / `backups/`.
+
+---
+
+## Splits (friends / group bills)
+
+When you pay a group lunch from **Joint** (or any account) and friends will repay you later:
+
+1. Add friends under **Splits → Friends** (e.g. Rahul, Priya).
+2. **Transactions → Add** → type Expense → enter the **full bill** (e.g. ₹2000).
+3. Enable **Split with friends**:
+   - Enter amounts directly, or use **Parts** (e.g. you `2`, friend `1`, friend `1`) then **Apply parts** → ₹1000 / ₹500 / ₹500
+   - Or tap **Equal** for an even split among you + each friend row
+   - Shares must sum to the bill total
+4. Save — Joint cash drops ₹2000; Dining/envelope/budget only count your share; friends owe the rest.
+5. When a friend UPI’s you back: **Splits → Record settlement** → pick friend, amount, account (usually Joint). Cash goes up; receivable goes down; **budget does not change**.
+
+### Telegram
+
+Only when the message includes the word **split** (otherwise it’s a normal expense):
+
+- `/add 2000 dinner split equal Rahul Priya` — you + friends even
+- `/add 2000 dinner split Rahul 500 Priya 500` — friend amounts; your share = remainder (₹1000)
+- `/add 2000 dinner split parts me 2 Rahul 1 Priya 1` — ratio 2:1:1
+- `/add 2000 dinner split me:2 Rahul:1 Priya:1` — same ratio, shorter form
+
+Friend names must match **Splits → Friends**. Confirm still required before save.
+
+Net Worth includes open “Friends owe” as an asset. Dashboard shows a reminder while balances are outstanding.
+
+Do **not** only log your ₹500 share if Joint actually paid ₹2000 — that would leave cash wrong.
 
 ---
 

@@ -207,6 +207,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     transferFields.forEach((el) => el.classList.toggle("hidden", !isTransfer));
     if (expenseFields) expenseFields.classList.toggle("hidden", !usesEnvelope);
+    document.querySelectorAll(".expense-only-fields").forEach((el) => {
+      el.classList.toggle("hidden", !isExpense);
+    });
     categoryFields.forEach((el) => el.classList.toggle("hidden", !showCategory));
     if (needWantFields) needWantFields.classList.toggle("hidden", !showNeedWant);
     if (paymentModeFields) paymentModeFields.classList.toggle("hidden", isIncome);
@@ -253,6 +256,8 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBalanceHint();
     syncAmountWords();
     updateSplitSummary();
+    syncFriendSplitVisibility();
+    updateFriendSplitSummary();
   }
 
   function applyInvestmentDefaults() {
@@ -387,6 +392,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       updateSplitSummary();
+      if (
+        householdPartsInput?.value &&
+        friendSplitRows?.querySelector('input[name="split_friend_parts"]')?.value
+      ) {
+        applyPartsFriendSplit({ quiet: true });
+      }
+      updateFriendSplitSummary();
     });
   }
   if (toAccountSelect) {
@@ -410,9 +422,163 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  /* —— Friend expense splits —— */
+  const splitEnabled = document.getElementById("split_enabled");
+  const friendSplitFields = document.getElementById("friendSplitFields");
+  const friendSplitRows = document.getElementById("friendSplitRows");
+  const friendSplitTemplate = document.getElementById("friendSplitRowTemplate");
+  const friendSplitSummary = document.getElementById("friendSplitSummary");
+  const addFriendSplitBtn = document.getElementById("addFriendSplitRow");
+  const equalSplitBtn = document.getElementById("equalSplitBtn");
+  const applyPartsBtn = document.getElementById("applyPartsBtn");
+  const householdShareInput = document.getElementById("split_household_share");
+  const householdPartsInput = document.getElementById("split_household_parts");
+
+  function syncFriendSplitVisibility() {
+    const isExpense = (typeSelect?.value || "expense") === "expense";
+    const on = Boolean(splitEnabled?.checked) && isExpense;
+    if (friendSplitFields) friendSplitFields.classList.toggle("hidden", !on);
+  }
+
+  function addFriendSplitRow() {
+    if (!friendSplitRows || !friendSplitTemplate) return;
+    const node = friendSplitTemplate.content.cloneNode(true);
+    friendSplitRows.appendChild(node);
+    bindFriendSplitRowEvents();
+    updateFriendSplitSummary();
+  }
+
+  function bindFriendSplitRowEvents() {
+    if (!friendSplitRows) return;
+    friendSplitRows.querySelectorAll(".remove-friend-split").forEach((btn) => {
+      btn.onclick = () => {
+        btn.closest(".friend-split-row")?.remove();
+        updateFriendSplitSummary();
+      };
+    });
+    friendSplitRows.querySelectorAll("input, select").forEach((el) => {
+      el.oninput = () => {
+        if (el.name === "split_friend_parts") applyPartsFriendSplit({ quiet: true });
+        updateFriendSplitSummary();
+      };
+      el.onchange = updateFriendSplitSummary;
+    });
+  }
+
+  function updateFriendSplitSummary() {
+    if (!friendSplitSummary) return;
+    if (!splitEnabled?.checked || (typeSelect?.value || "") !== "expense") {
+      friendSplitSummary.textContent = "";
+      return;
+    }
+    let friendSum = 0;
+    friendSplitRows?.querySelectorAll('input[name="split_friend_amount"]').forEach((input) => {
+      const v = parseFloat(input.value);
+      if (!Number.isNaN(v)) friendSum += v;
+    });
+    const hh = parseFloat(householdShareInput?.value || "0") || 0;
+    const total = parseFloat(amountInput?.value || "0") || 0;
+    const sum = hh + friendSum;
+    const diff = total - sum;
+    const ok = Math.abs(diff) < 0.005 && total > 0;
+    friendSplitSummary.textContent = ok
+      ? `Shares total ${sum.toLocaleString("en-IN")} — matches bill ✓`
+      : `Shares ${sum.toLocaleString("en-IN")} · bill ${total.toLocaleString("en-IN")} · diff ${diff.toLocaleString("en-IN")}`;
+    friendSplitSummary.style.color = ok ? "var(--success)" : "var(--warning)";
+  }
+
+  function divideByWeights(total, weights) {
+    const sumW = weights.reduce((a, b) => a + b, 0);
+    if (sumW <= 0) return null;
+    const amounts = weights.slice(0, -1).map((w) => Math.round((total * w) / sumW * 100) / 100);
+    const used = amounts.reduce((a, b) => a + b, 0);
+    amounts.push(Math.round((total - used) * 100) / 100);
+    return amounts;
+  }
+
+  function applyEqualFriendSplit() {
+    const total = parseFloat(amountInput?.value || "0") || 0;
+    if (total <= 0) return;
+    if (!friendSplitRows) return;
+    if (friendSplitRows.children.length === 0) addFriendSplitRow();
+    const nFriends = friendSplitRows.children.length;
+    const weights = Array(nFriends + 1).fill(1);
+    const amounts = divideByWeights(total, weights);
+    if (!amounts) return;
+    if (householdShareInput) householdShareInput.value = String(amounts[0]);
+    if (householdPartsInput) householdPartsInput.value = "1";
+    [...friendSplitRows.querySelectorAll(".friend-split-row")].forEach((row, i) => {
+      const amt = row.querySelector('input[name="split_friend_amount"]');
+      const parts = row.querySelector('input[name="split_friend_parts"]');
+      if (amt) amt.value = String(amounts[i + 1] ?? amounts[amounts.length - 1]);
+      if (parts) parts.value = "1";
+    });
+    updateFriendSplitSummary();
+  }
+
+  function applyPartsFriendSplit({ quiet = false } = {}) {
+    const total = parseFloat(amountInput?.value || "0") || 0;
+    if (total <= 0) {
+      if (!quiet && friendSplitSummary) {
+        friendSplitSummary.textContent = "Enter the bill amount first.";
+        friendSplitSummary.style.color = "var(--warning)";
+      }
+      return;
+    }
+    if (!friendSplitRows) return;
+    if (friendSplitRows.children.length === 0) {
+      if (!quiet) addFriendSplitRow();
+      else return;
+    }
+    const hhParts = parseFloat(householdPartsInput?.value || "");
+    const friendPartInputs = [
+      ...friendSplitRows.querySelectorAll('input[name="split_friend_parts"]'),
+    ];
+    const friendWeights = friendPartInputs.map((input) => parseFloat(input.value || ""));
+    const weights = [hhParts, ...friendWeights];
+    if (weights.some((w) => Number.isNaN(w) || w <= 0)) {
+      if (!quiet && friendSplitSummary) {
+        friendSplitSummary.textContent =
+          "Enter parts for you and each friend (e.g. 2, 1, 1).";
+        friendSplitSummary.style.color = "var(--warning)";
+      }
+      return;
+    }
+    const amounts = divideByWeights(total, weights);
+    if (!amounts) return;
+    if (householdShareInput) householdShareInput.value = String(amounts[0]);
+    [...friendSplitRows.querySelectorAll('input[name="split_friend_amount"]')].forEach(
+      (input, i) => {
+        input.value = String(amounts[i + 1] ?? amounts[amounts.length - 1]);
+      }
+    );
+    updateFriendSplitSummary();
+  }
+
+  if (splitEnabled) {
+    splitEnabled.addEventListener("change", () => {
+      syncFriendSplitVisibility();
+      if (splitEnabled.checked && friendSplitRows && friendSplitRows.children.length === 0) {
+        addFriendSplitRow();
+      }
+      updateFriendSplitSummary();
+    });
+  }
+  if (addFriendSplitBtn) addFriendSplitBtn.addEventListener("click", addFriendSplitRow);
+  if (equalSplitBtn) equalSplitBtn.addEventListener("click", applyEqualFriendSplit);
+  if (applyPartsBtn) applyPartsBtn.addEventListener("click", () => applyPartsFriendSplit());
+  if (householdShareInput) {
+    householdShareInput.addEventListener("input", updateFriendSplitSummary);
+  }
+  if (householdPartsInput) {
+    householdPartsInput.addEventListener("input", () => applyPartsFriendSplit({ quiet: true }));
+  }
+
   syncTypeVisibility();
   if (defaults.isEdit) updateEnvelopeMismatchHint();
   bindSplitRowEvents();
+  bindFriendSplitRowEvents();
   updateSplitSummary();
+  updateFriendSplitSummary();
   syncAmountWords();
 });

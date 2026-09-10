@@ -104,6 +104,7 @@ Keep **both** processes running for live use:
 | Command | Purpose |
 |---------|---------|
 | `/add 450 dinner` | Draft expense → Confirm |
+| `/add 2000 dinner split equal Rahul Priya` | Split bill (only if you include `split`) |
 | `/today` | Today's expenses |
 | `/recent` | Latest expenses |
 | `/month` | Monthly summary |
@@ -116,6 +117,8 @@ Keep **both** processes running for live use:
 | `/help` | Help |
 
 Plain text also works: `850 dinner`, `Spent 850 at Zomato for dinner`.
+
+Friend splits (optional): include the word `split` — e.g. `2000 dinner split Rahul 500 Priya 500` or `2000 dinner split parts me 2 Rahul 1 Priya 1`. Friend names must already exist under **Splits → Friends**. Without `split`, the expense is saved as a normal bill.
 
 Every expense shows a confirmation card (**Confirm / Edit / Cancel**) before it is written to the ledger.
 

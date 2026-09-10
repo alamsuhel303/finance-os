@@ -12,6 +12,12 @@ from models.joint_funding import JointFundingPlan, JointFundingSplit
 from models.liability import Liability
 from models.net_worth import NetWorthSnapshot
 from models.recurring_income import RecurringIncome
+from models.split import (
+    ExpenseSplit,
+    ExpenseSplitSettlement,
+    ExpenseSplitShare,
+    Friend,
+)
 from models.telegram import (
     TelegramCategoryAlias,
     TelegramLinkCode,
@@ -28,6 +34,10 @@ __all__ = [
     "Category",
     "Envelope",
     "EnvelopeEntry",
+    "ExpenseSplit",
+    "ExpenseSplitSettlement",
+    "ExpenseSplitShare",
+    "Friend",
     "Goal",
     "Insurance",
     "Investment",

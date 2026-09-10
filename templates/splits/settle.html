@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Record settlement</h1>
+    <p class="page-subtitle">Friend repaid you — credit cash, reduce what they owe (no budget hit)</p>
+  </div>
+  <a href="{{ url_for('splits.index') }}" class="btn btn-ghost">
+    <i class="bi bi-arrow-left me-1"></i> Back
+  </a>
+</div>
+
+<div class="glass-card form-card" style="max-width:560px">
+  {% if not friends %}
+    <div class="empty-state py-3">
+      <div>Nobody currently owes you</div>
+      <a href="{{ url_for('splits.index') }}" class="btn btn-ghost mt-2">Back to Splits</a>
+    </div>
+  {% else %}
+  <form method="post" novalidate>
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="form-label" for="friend_id">Friend</label>
+        <select class="form-select" id="friend_id" name="friend_id" required>
+          <option value="">Select friend</option>
+          {% for row in friends %}
+            <option value="{{ row.friend.id }}"
+                    data-owed="{{ row.outstanding }}"
+                    {% if form_data.get('friend_id')|string == row.friend.id|string %}selected{% endif %}>
+              {{ row.friend.name }} · owes {{ row.outstanding | inr }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="amount">Amount ({{ currency }})</label>
+        <input type="number" step="0.01" min="0.01" class="form-control" id="amount" name="amount"
+               value="{{ form_data.get('amount', '') }}" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="date">Date</label>
+        <input type="date" class="form-control" id="date" name="date"
+               value="{{ form_data.get('date', '') }}" required>
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="account_id">Received into</label>
+        <select class="form-select" id="account_id" name="account_id" required>
+          <option value="">Select account</option>
+          {% for acc in accounts %}
+            <option value="{{ acc.id }}" {% if form_data.get('account_id')|string == acc.id|string %}selected{% endif %}>
+              {{ acc.name }}
+            </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Usually Joint if they UPI’d you back to the shared account.</div>
+      </div>
+      {% if form_data.get('split_id') %}
+        <input type="hidden" name="split_id" value="{{ form_data.get('split_id') }}">
+      {% endif %}
+      <div class="col-12">
+        <label class="form-label" for="notes">Notes</label>
+        <textarea class="form-control" id="notes" name="notes" rows="2">{{ form_data.get('notes', '') }}</textarea>
+      </div>
+      <div class="col-12 d-flex gap-2">
+        <button type="submit" class="btn btn-accent">
+          <i class="bi bi-check-lg me-1"></i> Save settlement
+        </button>
+        <a href="{{ url_for('splits.index') }}" class="btn btn-ghost">Cancel</a>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

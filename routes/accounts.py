@@ -126,10 +126,13 @@ def statement_wizard():
                 )
             changes = account_service.apply_statement_balances(statement_date, balances)
             if changes:
+                names = ", ".join(c["account"] for c in changes[:3])
+                more = f" (+{len(changes) - 3} more)" if len(changes) > 3 else ""
                 flash(
-                    f"Updated {len(changes)} account"
-                    f"{'s' if len(changes) != 1 else ''} to match statement "
-                    f"as of {statement_date.isoformat()}.",
+                    f"Matched statement as of {statement_date.isoformat()} for "
+                    f"{names}{more}. Opening balance was adjusted — this does not "
+                    f"add a transaction. Open the account ledger to see "
+                    f"“Opening balance” at the bottom.",
                     "success",
                 )
             else:

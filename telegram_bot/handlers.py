@@ -205,6 +205,7 @@ async def _offer_pending(update: Update, user, msg_row, parsed) -> None:
         txn_date=parsed.txn_date or telegram_service.today_local(),
         paid_by=paid_by,
         merchant=parsed.merchant,
+        split_payload=getattr(parsed, "split_payload", None),
     )
 
     if not pending.category_id or parsed.category_confidence == "low":

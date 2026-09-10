@@ -38,6 +38,11 @@ STOP_WORDS = {
     "personal",
     "joint",
     "add",
+    "split",
+    "equal",
+    "parts",
+    "ratio",
+    "me",
 }
 
 
@@ -53,6 +58,7 @@ class ParseResult:
     txn_date: date | None = None
     error: str | None = None
     raw_tokens: list[str] | None = None
+    split_payload: dict | None = None  # friend split when "split" keyword used
 
 
 def parse_expense_text(text: str, *, default_date: date | None = None) -> ParseResult:
@@ -131,6 +137,24 @@ def parse_expense_text(text: str, *, default_date: date | None = None) -> ParseR
     rest_clean = re.sub(r"\s+for\s+", " ", rest_clean, flags=re.IGNORECASE)
     rest_clean = re.sub(r"\s+", " ", rest_clean).strip()
 
+    # Friend split only when the word "split" appears
+    split_m = re.search(r"\bsplit\b", rest_clean, flags=re.IGNORECASE)
+    if split_m:
+        clause = rest_clean[split_m.end() :].strip()
+        rest_clean = rest_clean[: split_m.start()].strip()
+        rest_clean = re.sub(r"\s+", " ", rest_clean).strip()
+        try:
+            from services import split_service
+            from services.split_service import SplitValidationError
+
+            result.split_payload = split_service.parse_telegram_split_clause(
+                amount, clause
+            )
+        except SplitValidationError as exc:
+            return ParseResult(error=str(exc))
+        except Exception as exc:  # pragma: no cover — unexpected
+            return ParseResult(error=f"Could not parse split: {exc}")
+
     tokens = [t for t in re.split(r"\s+", rest_clean) if t]
     result.raw_tokens = tokens
 
@@ -161,6 +185,8 @@ def parse_expense_text(text: str, *, default_date: date | None = None) -> ParseR
 
     result.merchant = merchant
     result.description = " ".join(desc_tokens).strip() or (merchant or "Expense")
+    if result.split_payload and result.description == "Expense":
+        result.description = "Split expense"
     if len(result.description) > 200:
         result.description = result.description[:200]
 

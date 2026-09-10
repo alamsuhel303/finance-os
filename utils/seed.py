@@ -186,6 +186,7 @@ DEFAULT_CATEGORIES = [
     ("Travel Cab / Transport", "expense", "bi-taxi-front", "#67e8f9"),
     ("Investment", "investment", "bi-graph-up-arrow", "#10b981"),
     ("Salary", "income", "bi-wallet2", "#22c55e"),
+    ("Other Income", "income", "bi-cash-coin", "#86efac"),
 ]
 
 
